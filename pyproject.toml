@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tt-prism"
+version = "0.1.0"
+description = "Pipeline swim-lane diagram authoring and rendering for TRISC/Tensix perf modeling"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.6",
+    "PyYAML>=6.0",
+    "typer>=0.12",
+    "rich>=13",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+pdf = ["cairosvg>=2.7"]
+dev = ["pytest>=8", "ruff>=0.4"]
+
+[project.scripts]
+tt-prism = "tt_prism.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tt_prism"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/tt_prism/web/static" = "tt_prism/web/static"
+"src/tt_prism/web/templates" = "tt_prism/web/templates"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

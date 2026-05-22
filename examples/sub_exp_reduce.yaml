@@ -1,0 +1,52 @@
+# Modelled after the sub+exp / reduce fragment from the LLK Excalidraw perf board.
+# TRISC0 = UNPACK-heavy, TRISC1 = SFPU/FPU math, TRISC2 = PACK.
+# Durations and offsets are illustrative — adjust to match real traces.
+
+title: "sub+exp / reduce pipeline (fragment)"
+clock_ghz: 1.0
+grid_clocks: 32
+
+lanes:
+  - { id: trisc0, name: "TRISC 0", order: 0 }
+  - { id: trisc1, name: "TRISC 1", order: 1 }
+  - { id: trisc2, name: "TRISC 2", order: 2 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+work_items:
+  # sub_bcast init
+  - { id: sub_init_t0, lane_id: trisc0, resource_id: unpack, label: "sub_bcast_init",             start_clock:   0, duration_clocks:  79, tags: [init, sub_exp] }
+  - { id: sub_init_t1, lane_id: trisc1, resource_id: fpu,    label: "sub_bcast_init",             start_clock:   0, duration_clocks:  79, tags: [init, sub_exp] }
+
+  # UNPACK sub_bcast_cols for QK[0,0:7]
+  - { id: unp_qk_0,    lane_id: trisc0, resource_id: unpack, label: "sub_bcast_cols QK[0,0:7] D0", start_clock:  79, duration_clocks: 257, tags: [sub_exp, qk] }
+  - { id: fpu_sub_0,   lane_id: trisc1, resource_id: fpu,    label: "sub_bcast_cols QK[0,0:7] D0", start_clock:  79, duration_clocks: 257, tags: [sub_exp, qk] }
+
+  # Exp on D0
+  - { id: sfpu_exp_0,  lane_id: trisc1, resource_id: sfpu,   label: "exp[0,0:7] D0",               start_clock: 336, duration_clocks: 856, tags: [sub_exp, exp] }
+
+  # PACK sub_exp D0
+  - { id: pack_0a,     lane_id: trisc2, resource_id: pack,   label: "Pack sub_exp QK[0,0:7] D0",   start_clock: 336, duration_clocks: 296, tags: [sub_exp, pack] }
+  - { id: pack_0b,     lane_id: trisc2, resource_id: pack,   label: "PackAcc sub_exp QK[0,0:7] D0", start_clock: 632, duration_clocks: 592, tags: [sub_exp, pack, acc] }
+
+  # Second column batch (D1)
+  - { id: unp_qk_1,    lane_id: trisc0, resource_id: unpack, label: "sub_bcast_cols QK[0,8:15] D1", start_clock: 336, duration_clocks: 257, tags: [sub_exp, qk] }
+  - { id: fpu_sub_1,   lane_id: trisc1, resource_id: fpu,    label: "sub_bcast_cols QK[0,8:15] D1", start_clock: 336, duration_clocks: 257, tags: [sub_exp, qk] }
+  - { id: sfpu_exp_1,  lane_id: trisc1, resource_id: sfpu,   label: "exp[0,8:15] D1",               start_clock: 593, duration_clocks: 856, tags: [sub_exp, exp] }
+  - { id: pack_1a,     lane_id: trisc2, resource_id: pack,   label: "Pack sub_exp QK[0,8:15] D1",   start_clock: 1224, duration_clocks: 296, tags: [sub_exp, pack] }
+  - { id: pack_1b,     lane_id: trisc2, resource_id: pack,   label: "PackAcc sub_exp QK[0,8:15] D1", start_clock: 1520, duration_clocks: 592, tags: [sub_exp, pack, acc] }
+
+dependencies:
+  - { from: sub_init_t0, to: unp_qk_0, kind: fifo }
+  - { from: unp_qk_0,    to: fpu_sub_0, kind: fifo }
+  - { from: fpu_sub_0,   to: sfpu_exp_0, kind: fifo }
+  - { from: sfpu_exp_0,  to: pack_0a, kind: fifo }
+  - { from: pack_0a,     to: pack_0b, kind: flow }
+  - { from: unp_qk_1,    to: fpu_sub_1, kind: fifo }
+  - { from: fpu_sub_1,   to: sfpu_exp_1, kind: fifo }
+  - { from: sfpu_exp_1,  to: pack_1a, kind: fifo }
+  - { from: pack_1a,     to: pack_1b, kind: flow }

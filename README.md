@@ -1,0 +1,300 @@
+# tt-prism
+
+Pipeline swim-lane diagrams for TRISC/Tensix performance modeling. Replaces the
+manual Excalidraw workflow the LLK team uses today, and provides the
+visualization layer for the perf simulator + RTL-wave post-processor described
+in the [perf optimization tooling proposal](https://tenstorrent.atlassian.net/wiki/spaces/LLK/pages/1116438541).
+
+## What it does
+
+- Lets you **author** a pipeline diagram (TRISC0/1/2 + exec-unit resources like
+  UNPACK/FPU/SFPU/PACK/THCON, with start/duration in clocks, dependencies, and
+  tags) as a hand-editable YAML file.
+- **Renders** the diagram to SVG or PDF from the CLI, or to an interactive
+  editor in a local web app.
+- Exposes the diagram as **JSON over HTTP** so other tools (e.g. the perf
+  simulator's pipeline assembler) can produce or consume the same format.
+
+Everything operates on one data model — see [`models.py`](src/tt_prism/models.py).
+There's no separate "presentation" type: the YAML file is the source of truth,
+and the CLI, web editor, and API all read/write the same shape.
+
+## Install
+
+Requires Python 3.10+.
+
+```bash
+git clone <repo-url> tt-prism
+cd tt-prism
+pip install -e .
+# optional: PDF export needs cairosvg
+pip install -e '.[pdf]'
+```
+
+After install, the `tt-prism` console command is available. If it isn't on your
+PATH, run `python -m tt_prism.cli ...` instead.
+
+## Quick start
+
+```bash
+# scaffold a blank diagram
+tt-prism new my_pipeline.yaml
+
+# open the interactive editor (browser opens automatically)
+tt-prism serve examples/sub_exp_reduce.yaml
+
+# render to SVG / PDF
+tt-prism render examples/sub_exp_reduce.yaml -o out.svg
+tt-prism render examples/sub_exp_reduce.yaml -o out.pdf
+
+# validate without rendering
+tt-prism validate examples/sub_exp_reduce.yaml
+```
+
+## CLI reference
+
+| Command    | Purpose                                                       | Key options                                                          |
+|------------|---------------------------------------------------------------|----------------------------------------------------------------------|
+| `new`      | Scaffold a starter YAML                                        | `--force/-f` overwrite existing                                       |
+| `validate` | Load, validate references, print a summary                     | —                                                                    |
+| `render`   | Render to SVG (default) or PDF (if `-o` ends in `.pdf`)        | `-o/--output`, `--px-per-clock`, `--lane-height`                     |
+| `serve`    | Launch the local web editor on a YAML file                     | `--host` (`127.0.0.1`), `--port` (`8765`), `--open/--no-open`        |
+
+## Editor
+
+The editor is a single page hand-written in vanilla JS + SVG — no build step.
+Open it via `tt-prism serve <diagram.yaml>`; the file on disk is the source of
+truth, and saves write back to it.
+
+### Mouse / drag
+
+- **Click** a work item to select; **shift-click** to add/remove from selection
+- **Drag** an item along its lane to change its `start_clock` (snaps to `grid_clocks`)
+- **Drag vertically** to move an item between lanes
+- **Click the background** to clear selection
+- Hover an item: its dependency arrows thicken (still fully visible by default)
+- **Link mode** (toolbar checkbox): click source then target to add a dependency
+
+### Toolbar
+
+- `+ Item / + Lane / + Resource` — append a new element
+- `Copy / Paste / Duplicate` — clipboard operations on the selection
+- `Grid` and `px/clk` — change snap unit and zoom live
+- `Filter by tag` — type a tag, press Enter to select all items with that tag
+- `Batch edit…` — apply a shift/resource/tag change to every selected item
+- `Save / Reload / Export SVG` — save back to YAML, reload from disk, or download an SVG snapshot
+
+### Keyboard
+
+| Shortcut          | Action                                          |
+|-------------------|-------------------------------------------------|
+| `Ctrl/Cmd-S`      | Save to disk                                    |
+| `Ctrl/Cmd-C`      | Copy selection to in-app clipboard               |
+| `Ctrl/Cmd-V`      | Paste (offset by one grid step from the original) |
+| `Ctrl/Cmd-D`      | Duplicate selection in place (copy + paste)      |
+| `Delete` / `Backspace` | Delete selection + any deps referencing it  |
+
+Paste re-keys IDs (`foo` → `foo_1`, etc.) and preserves intra-selection
+dependencies between the new items.
+
+## YAML schema
+
+A diagram is a single YAML document with five top-level lists:
+
+```yaml
+title: "sub+exp / reduce pipeline (fragment)"
+clock_ghz: 1.0          # optional — enables ns labels in the ruler
+grid_clocks: 32         # snap unit and major-tick interval
+
+lanes:
+  - { id: trisc0, name: "TRISC 0", order: 0 }
+  - { id: trisc1, name: "TRISC 1", order: 1 }
+  - { id: trisc2, name: "TRISC 2", order: 2 }
+
+resources:
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+work_items:
+  - id: unp_qk_0
+    lane_id: trisc0          # required, must be a defined lane
+    resource_id: unpack      # optional, colors the bar
+    label: "sub_bcast_cols QK[0,0:7] D0"
+    start_clock: 79
+    duration_clocks: 257
+    tags: [unpack]           # free-form tags, used for batch edit / filter
+
+dependencies:
+  - { from: unp_qk_0, to: fpu_sub_0, kind: fifo }
+  - { from: fpu_sub_0, to: sfpu_exp_0, kind: dep }
+  - { from: pack_0a, to: pack_0b, kind: flow, label: "acc" }
+```
+
+### Concepts
+
+| Concept      | Purpose                                                          |
+|--------------|------------------------------------------------------------------|
+| **Lane**     | A row in the diagram. Represents an execution context (TRISC0/1/2). Scales to any count via `order`. |
+| **Resource** | A type of work (UNPACK/FPU/SFPU/PACK/THCON, or whatever you define). Provides color + semantic tag. Orthogonal to lane — one lane can host work items of any resource. |
+| **WorkItem** | A bar with `start_clock`, `duration_clocks`, on one lane, optionally of one resource. The `tags` list enables tag-based filtering and batch edits. |
+| **Dependency** | An arrow from one item to another. `kind ∈ {dep, fifo, flow}` currently controls *color only* (`dep`=grey, `fifo`=blue, `flow`=green dashed). |
+
+### Cross-reference validation
+
+On load, the YAML is validated for:
+- Unique work-item IDs
+- Every `lane_id` and `resource_id` resolves
+- Every `from` / `to` in a dependency resolves
+
+Invalid files fail with a clear error from `tt-prism validate` and a 400 from
+the editor's PUT endpoint.
+
+## Architecture
+
+```
+┌─────────────┐    yaml    ┌──────────────┐
+│ diagram.yaml├───load────▶│   models.py  │  Pydantic data model
+└─────────────┘            │  (Diagram)   │
+       ▲                   └──────┬───────┘
+       │                          │
+       │ storage.dump             │
+       │                          │  used by:
+       │                          ▼
+       │              ┌────────────────────────┐
+       │              │ renderer/svg.py        │  pure-Python SVG generator
+       │              │   render_svg(diagram)  │  (also feeds PDF via cairosvg)
+       │              └────────────────────────┘
+       │                          ▲
+       │                          │
+       │                          │
+┌──────┴────────┐    HTTP    ┌────┴────────┐    HTML/JS    ┌──────────────┐
+│   cli.py      ├───────────▶│  server.py  ├──────────────▶│  app.js      │
+│  (typer)      │            │  (FastAPI)  │               │  (vanilla JS │
+│   new         │            │             │               │  + SVG, no   │
+│   validate    │            │  /api/      │               │  build step) │
+│   render      │            │  diagram    │               │              │
+│   serve───────┘            │  (GET/PUT)  │               │ renders SVG, │
+└───────────────┘            │  render.svg │               │ drags, edits,│
+                             └─────────────┘               │ saves        │
+                                                           └──────────────┘
+```
+
+### Python ↔ Web bridge
+
+The frontend talks to the backend over a tiny HTTP API:
+
+| Endpoint           | Method | Purpose                                            |
+|--------------------|--------|----------------------------------------------------|
+| `/`                | GET    | Editor HTML shell                                   |
+| `/api/diagram`     | GET    | Load YAML, return `{diagram: {...}}` JSON          |
+| `/api/diagram`     | PUT    | Validate `{diagram: {...}}` body, write YAML back  |
+| `/api/render.svg`  | GET    | Server-side SVG render of the on-disk diagram      |
+| `/static/*`        | GET    | JS/CSS assets                                       |
+
+The JS doesn't use a generated client — it consumes/produces JSON matching the
+Pydantic schema directly. There's no auth, no CORS, no websocket — everything
+is one-shot REST. See [`server.py`](src/tt_prism/server.py) and the round-trip
+in [`app.js`](src/tt_prism/web/static/app.js) (`loadFromServer` / `saveToServer`).
+
+### Renderer
+
+The SVG renderer in [`renderer/svg.py`](src/tt_prism/renderer/svg.py) is pure
+Python — no headless browser. It produces a self-contained SVG with:
+
+- Time ruler with auto-thinned labels (no overlap at high zoom-out)
+- Per-lane rows with a left gutter for the lane name
+- Color-by-resource work-item bars
+- **Cubic Bezier dependency arrows** with per-item fan-out: edges sharing a
+  source attach to that source at distinct Y positions sorted by target lane,
+  so parallel edges don't cross unnecessarily. Three tangent strategies:
+  - horizontal tangents for forward-with-gap (classic flow curve)
+  - vertical tangents for overlap (smooth vertical drop between lanes)
+  - big lift over the top for back-edges
+- PDF export via `cairosvg` (optional `[pdf]` extra)
+
+The editor's JS mirrors the renderer geometrically so what you see while
+editing matches what `tt-prism render` will produce.
+
+## Repository layout
+
+```
+tt-prism/
+├── pyproject.toml
+├── src/tt_prism/
+│   ├── cli.py                 # Typer CLI: new / validate / render / serve
+│   ├── models.py              # Pydantic Diagram / Lane / Resource / WorkItem / Dependency
+│   ├── storage.py             # YAML load/dump
+│   ├── grid.py                # clock↔px Layout
+│   ├── server.py              # FastAPI: REST API + static + template
+│   ├── renderer/
+│   │   ├── svg.py             # Pure-Python SVG renderer
+│   │   └── pdf.py             # SVG → PDF via cairosvg
+│   └── web/
+│       ├── templates/editor.html
+│       └── static/{app.js, styles.css, favicon.svg}
+├── examples/
+│   ├── matmul_minimal.yaml
+│   └── sub_exp_reduce.yaml
+└── tests/
+    ├── test_models.py         # ref/duplicate/roundtrip validation
+    └── test_renderer.py       # SVG output smoke tests
+```
+
+## Extending
+
+### Add a field to the data model
+
+1. Add it to the relevant Pydantic class in [`models.py`](src/tt_prism/models.py).
+2. (Optional) Render it in [`renderer/svg.py`](src/tt_prism/renderer/svg.py)
+   and [`web/static/app.js`](src/tt_prism/web/static/app.js).
+3. (Optional) Read/write it in the inspector panel by editing
+   [`web/templates/editor.html`](src/tt_prism/web/templates/editor.html) and
+   `onInspectorSubmit` in `app.js`.
+
+No code generation, no schema regeneration. The JSON exchanged with the editor
+just gets the new field.
+
+### Use as a Python library
+
+```python
+from tt_prism import storage
+from tt_prism.models import Diagram, Lane, WorkItem
+from tt_prism.renderer.svg import render_svg
+
+diagram = Diagram(
+    title="example",
+    grid_clocks=8,
+    lanes=[Lane(id="l0", name="TRISC 0", order=0)],
+    work_items=[WorkItem(id="a", lane_id="l0", start_clock=0, duration_clocks=16)],
+)
+svg = render_svg(diagram)
+storage.dump(diagram, "out.yaml")
+```
+
+### Programmatic diagram producers
+
+If you're building something that emits diagrams (e.g. the perf simulator's
+pipeline-assembler stage), construct a `Diagram` and write YAML via
+`storage.dump`. Anything that conforms to the schema renders without further
+plumbing.
+
+## Tests
+
+```bash
+pytest
+```
+
+Currently covers model serialization round-trip, reference validation, and
+SVG-output smoke tests.
+
+## Status
+
+This is a working tool — actively used to author the LLK team's pipeline
+diagrams. Known gaps / planned work:
+
+- Undo/redo
+- Resize work items by dragging the right edge (today: inspector only)
+- Importers from tracy traces and RTL wave dumps
+- Stall annotations once the perf simulator exposes them

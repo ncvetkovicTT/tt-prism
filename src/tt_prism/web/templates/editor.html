@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>tt-prism — editor</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
+<link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+<header>
+  <div class="title">
+    <strong>tt-prism</strong>
+    <span id="diagram-path" class="path">{{ diagram_path }}</span>
+  </div>
+  <div class="toolbar">
+    <button id="btn-add-item" title="Add work item">+ Item</button>
+    <button id="btn-add-lane" title="Add lane">+ Lane</button>
+    <button id="btn-add-resource" title="Add resource">+ Resource</button>
+    <span class="sep"></span>
+    <button id="btn-copy" title="Copy selection (Ctrl/Cmd-C)">Copy</button>
+    <button id="btn-paste" title="Paste (Ctrl/Cmd-V) — offset by one grid step">Paste</button>
+    <button id="btn-duplicate" title="Duplicate selection in place (Ctrl/Cmd-D)">Duplicate</button>
+    <span class="sep"></span>
+    <label class="inline">
+      <input type="checkbox" id="dep-mode"/> Link mode
+    </label>
+    <span class="sep"></span>
+    <label class="inline">Grid
+      <input type="number" id="grid-clocks" min="1" step="1" style="width:70px"/>
+    </label>
+    <label class="inline">px/clk
+      <input type="number" id="px-per-clock" min="0.05" step="0.05" style="width:70px"/>
+    </label>
+    <span class="sep"></span>
+    <label class="inline">Filter by tag
+      <input type="text" id="tag-filter" placeholder="e.g. matmul" style="width:140px"/>
+    </label>
+    <button id="btn-batch-edit" title="Batch edit currently-selected items">Batch edit…</button>
+    <span class="sep"></span>
+    <button id="btn-save" class="primary">Save</button>
+    <button id="btn-reload" title="Reload from disk">Reload</button>
+    <button id="btn-export-svg">Export SVG</button>
+    <span id="status" class="status"></span>
+  </div>
+</header>
+<main>
+  <aside id="inspector">
+    <h3>Inspector</h3>
+    <div id="insp-empty" class="muted">Select a work item to edit its properties. Shift-click to multi-select.</div>
+    <form id="insp-form" hidden>
+      <label>ID <input name="id" required/></label>
+      <label>Label <input name="label"/></label>
+      <label>Lane <select name="lane_id"></select></label>
+      <label>Resource <select name="resource_id"><option value="">(none)</option></select></label>
+      <label>Start (clk) <input name="start_clock" type="number" step="1"/></label>
+      <label>Duration (clk) <input name="duration_clocks" type="number" min="1" step="1"/></label>
+      <label>Tags (comma-sep) <input name="tags" placeholder="matmul,init"/></label>
+      <div class="row">
+        <button type="submit" class="primary">Apply</button>
+        <button type="button" id="btn-delete-item">Delete</button>
+      </div>
+    </form>
+    <hr/>
+    <h3>Selection</h3>
+    <div id="sel-info" class="muted">No selection.</div>
+  </aside>
+  <div id="canvas-wrap">
+    <div id="canvas"></div>
+  </div>
+</main>
+<dialog id="dlg-batch">
+  <form method="dialog">
+    <h3>Batch edit</h3>
+    <p id="dlg-batch-msg" class="muted"></p>
+    <label>Shift start by (clk) <input id="dlg-shift" type="number" value="0" step="1"/></label>
+    <label>Set resource <select id="dlg-resource"><option value="">(unchanged)</option></select></label>
+    <label>Add tag <input id="dlg-add-tag" placeholder=""/></label>
+    <label>Remove tag <input id="dlg-remove-tag" placeholder=""/></label>
+    <div class="row">
+      <button value="cancel">Cancel</button>
+      <button value="apply" id="dlg-batch-apply" class="primary">Apply</button>
+    </div>
+  </form>
+</dialog>
+<script src="/static/app.js" type="module"></script>
+</body>
+</html>

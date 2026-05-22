@@ -1,0 +1,28 @@
+# Minimal example mirroring the UNPACK/FPU/PACK diagram (A0/B0, B0xA0, C0).
+
+title: "matmul: A0/B0 → B0×A0 → C0"
+clock_ghz: 1.0
+grid_clocks: 8
+
+lanes:
+  - { id: unpacka, name: "UNPACK A", order: 0 }
+  - { id: unpackb, name: "UNPACK B", order: 1 }
+  - { id: fpu,     name: "FPU",      order: 2 }
+  - { id: pack,    name: "PACK",     order: 3 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: unpack_b, name: "UNPACK B", color: "#90caf9" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: pack,   name: "PACK",   color: "#90caf9" }
+
+work_items:
+  - { id: a0, lane_id: unpacka, resource_id: unpack,   label: "A0",        start_clock:  0, duration_clocks: 52, tags: [unpack] }
+  - { id: b0, lane_id: unpackb, resource_id: unpack_b, label: "B0",        start_clock:  0, duration_clocks: 52, tags: [unpack] }
+  - { id: m0, lane_id: fpu,     resource_id: fpu,      label: "C0 = B0×A0", start_clock: 52, duration_clocks: 16, tags: [matmul] }
+  - { id: p0, lane_id: pack,    resource_id: pack,     label: "C0",        start_clock: 68, duration_clocks: 32, tags: [pack] }
+
+dependencies:
+  - { from: a0, to: m0, kind: fifo }
+  - { from: b0, to: m0, kind: fifo }
+  - { from: m0, to: p0, kind: fifo }
