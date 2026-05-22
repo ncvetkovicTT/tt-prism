@@ -29,7 +29,7 @@ htmlcov/
 .DS_Store
 
 # Generated artifacts (rendered diagrams users may produce locally)
-*.svg
-*.pdf
-!examples/**/*.svg
-!examples/**/*.pdf
+/*.svg
+/*.pdf
+/out*.svg
+/out*.pdf
