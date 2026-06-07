@@ -7,9 +7,14 @@ in the [perf optimization tooling proposal](https://tenstorrent.atlassian.net/wi
 
 ## What it does
 
-- Lets you **author** a pipeline diagram (TRISC0/1/2 + exec-unit resources like
-  UNPACK/FPU/SFPU/PACK/THCON, with start/duration in clocks, dependencies, and
-  tags) as a hand-editable YAML file.
+- Lets you **author** a pipeline diagram (TRISC0/1/2 lanes + UNPACK/FPU/SFPU/PACK
+  resources) as a hand-editable YAML file — either as high-level **ops** (one
+  Compute API call each) whose timing the scheduler derives, or as hand-placed
+  **work items** with explicit start clocks.
+- **Schedules** op-authored diagrams against Tensix constraints (intra-op
+  unpack→math→pack handshake, singleton engines, virtual DEST double-buffering,
+  cross-op data dependencies through L1) so the picture is always physically
+  legal — move or resize one block and everything downstream reflows.
 - **Renders** the diagram to SVG or PDF from the CLI, or to an interactive
   editor in a local web app.
 - Exposes the diagram as **JSON over HTTP** so other tools (e.g. the perf
@@ -34,31 +39,81 @@ pip install -e '.[pdf]'
 After install, the `tt-prism` console command is available. If it isn't on your
 PATH, run `python -m tt_prism.cli ...` instead.
 
-## Quick start
+## Usage
+
+There are two ways to author a diagram, and both render/edit through the same
+tools:
+
+- **Op-authored** (recommended) — describe *ops* (one Compute API call each) and
+  their dependencies; the scheduler **derives** every start clock so the picture
+  is always a legal Tensix schedule. See
+  [Op-authored diagrams](#op-authored-diagrams-constraint-scheduler). Examples:
+  [`examples/ops_dest_banks.yaml`](examples/ops_dest_banks.yaml),
+  [`examples/ops_add_then_mul.yaml`](examples/ops_add_then_mul.yaml).
+- **Flat** (legacy) — hand-place `work_items` with explicit `start_clock`s.
+  Example: [`examples/sub_exp_reduce.yaml`](examples/sub_exp_reduce.yaml).
+
+### CLI
 
 ```bash
-# scaffold a blank diagram
+# 1. (optional) scaffold a blank flat diagram to start from
 tt-prism new my_pipeline.yaml
 
-# open the interactive editor (browser opens automatically)
-tt-prism serve examples/sub_exp_reduce.yaml
+# 2. validate — checks references, and for op-diagrams that they SCHEDULE
+tt-prism validate examples/ops_dest_banks.yaml
 
-# render to SVG / PDF
-tt-prism render examples/sub_exp_reduce.yaml -o out.svg
-tt-prism render examples/sub_exp_reduce.yaml -o out.pdf
+# 3. schedule — solve an op-diagram and print the resolved timeline (start/dur/end)
+tt-prism schedule examples/ops_dest_banks.yaml
 
-# validate without rendering
-tt-prism validate examples/sub_exp_reduce.yaml
+# 4. render — to SVG (default) or PDF; op-diagrams are scheduled first
+tt-prism render examples/ops_dest_banks.yaml -o out.svg
+tt-prism render examples/ops_dest_banks.yaml -o out.pdf      # needs the [pdf] extra
+
+# edit loop: tweak a duration / dest_bank in the YAML, re-run schedule/render to
+# see everything downstream reflow.
 ```
 
-## CLI reference
+CLI reference:
 
-| Command    | Purpose                                                       | Key options                                                          |
-|------------|---------------------------------------------------------------|----------------------------------------------------------------------|
-| `new`      | Scaffold a starter YAML                                        | `--force/-f` overwrite existing                                       |
-| `validate` | Load, validate references, print a summary                     | —                                                                    |
-| `render`   | Render to SVG (default) or PDF (if `-o` ends in `.pdf`)        | `-o/--output`, `--px-per-clock`, `--lane-height`                     |
-| `serve`    | Launch the local web editor on a YAML file                     | `--host` (`127.0.0.1`), `--port` (`8765`), `--open/--no-open`        |
+| Command    | Purpose                                                                 | Key options                                                   |
+|------------|-------------------------------------------------------------------------|---------------------------------------------------------------|
+| `new`      | Scaffold a starter YAML                                                  | `--force/-f` overwrite existing                               |
+| `validate` | Load, validate references; for op-diagrams, confirm they schedule        | —                                                             |
+| `schedule` | Solve an op-authored diagram and print the resolved timeline             | —                                                             |
+| `render`   | Render to SVG (default) or PDF (if `-o` ends in `.pdf`)                  | `-o/--output`, `--px-per-clock`, `--lane-height`              |
+| `serve`    | Launch the local web editor on a YAML file                               | `--host` (`127.0.0.1`), `--port` (`8765`), `--open/--no-open` |
+
+### Web editor (GUI)
+
+```bash
+tt-prism serve examples/ops_dest_banks.yaml      # browser opens at http://127.0.0.1:8765
+```
+
+The YAML file on disk is the source of truth; the editor reads and writes it.
+
+- **Op-authored diagrams** open in a **scheduled (read-only-position) view**: bars
+  are placed by the solver, not by hand. Select a block and edit its **Duration**
+  or **DEST bank** in the inspector, then **Apply** — the whole schedule re-solves
+  and reflows live. **Save** writes the edited ops back to the YAML.
+- **Flat diagrams** open in the full editor: drag to move/restage items, edit in
+  the inspector, link dependencies, batch-edit, copy/paste. See
+  [Editor](#editor) for the mouse/keyboard reference.
+
+If `tt-prism` isn't on your `PATH`, use `python -m tt_prism.cli serve …`. Stop the
+server with `Ctrl-C`.
+
+### Running tests
+
+```bash
+pytest                              # if the package is installed (pip install -e .)
+PYTHONPATH=src python -m pytest     # run from source without installing
+```
+
+Coverage: model validation + YAML round-trip, the SVG renderer, and the scheduler
+— intra-op precedence, resource/lane serialization, cross-op `l1_data`
+dependencies, and virtual DEST-bank double-buffering
+(`tests/test_schedule.py`, `test_data_deps.py`, `test_resource_deps.py`,
+`test_dest_banks.py`).
 
 ## Editor
 
@@ -342,19 +397,21 @@ plumbing.
 
 ## Tests
 
-```bash
-pytest
-```
-
-Currently covers model serialization round-trip, reference validation, and
-SVG-output smoke tests.
+See [Running tests](#running-tests) under Usage.
 
 ## Status
 
 This is a working tool — actively used to author the LLK team's pipeline
-diagrams. Known gaps / planned work:
+diagrams. Working today: op-authored diagrams with the constraint scheduler
+(intra-op + resource/lane serialization + cross-op `l1_data` deps + virtual DEST
+banks), CLI (`new`/`validate`/`schedule`/`render`/`serve`), and a web editor that
+renders and live-reflows op-diagrams. Known gaps / planned work:
 
+- Op-group drag / reorder and right-edge resize-drag in the editor (today: edit
+  durations and DEST banks via the inspector)
+- An op palette ("+ Matmul", "+ Reduce", …) and a validate-vs-auto-flow toggle
+- Calibrating / validating durations against ttsim; importers from tracy traces
+  and RTL wave dumps
+- Per-op dataflow drill-down (see [`reference/`](reference/)) and modeled extras
+  like expected bandwidth / NOP counts
 - Undo/redo
-- Resize work items by dragging the right edge (today: inspector only)
-- Importers from tracy traces and RTL wave dumps
-- Stall annotations once the perf simulator exposes them
