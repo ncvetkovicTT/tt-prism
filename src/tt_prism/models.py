@@ -215,6 +215,9 @@ class Diagram(BaseModel):
         return None
 
     def total_clocks(self) -> int:
+        # Operates on flat work_items only. For op-authored diagrams (no
+        # work_items) the makespan comes from the scheduler — call
+        # schedule.solve(...).total_clocks() or flatten via to_render_diagram first.
         if not self.work_items:
             return self.grid_clocks
         return max(w.end_clock for w in self.work_items)

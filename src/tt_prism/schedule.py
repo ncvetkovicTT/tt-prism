@@ -140,6 +140,10 @@ def build_edges(diagram: Diagram) -> list[Edge]:
         to = _resolve_endpoint(diagram, d.to, as_source=False)
         if frm is None or to is None:
             continue  # endpoint not in the op graph; ignore
+        if frm == to:
+            # A block depending on itself (e.g. a single-block op with a dep to
+            # itself) is never meaningful and would deadlock; drop it.
+            continue
         edges.append(Edge(frm, to, gap=d.min_gap_clocks, reason=d.kind))
 
     return edges
@@ -207,6 +211,12 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
 
     sched = solve(diagram)
     bank_of = {b.id: b.dest_bank for op in diagram.ops for b in op.blocks}
+
+    def _tags(b: ScheduledBlock) -> list[str]:
+        bank = bank_of.get(b.block_id)
+        bank_tags = [f"dest{bank}"] if bank is not None else []   # bank 0 -> "dest0"
+        return [b.op_id, *bank_tags, *b.tags]
+
     work_items = [
         WorkItem(
             id=b.block_id,
@@ -215,7 +225,7 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
             label=b.label,
             start_clock=b.start_clock,
             duration_clocks=b.duration_clocks,
-            tags=[b.op_id, *( [f"dest{bank_of[b.block_id]}"] if bank_of.get(b.block_id) is not None else [] ), *b.tags],
+            tags=_tags(b),
         )
         for b in sched.blocks
     ]

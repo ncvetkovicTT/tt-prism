@@ -524,7 +524,16 @@ function onInspectorSubmit(ev) {
     if (!blk) return;
     blk.duration_clocks = Math.max(1, parseInt(fd.get("duration_clocks"), 10) || 1);
     const bankRaw = (fd.get("dest_bank") || "").toString().trim();
-    blk.dest_bank = bankRaw === "" ? null : Math.max(0, parseInt(bankRaw, 10) || 0);
+    if (bankRaw === "") {
+      blk.dest_bank = null;
+    } else {
+      const n = parseInt(bankRaw, 10);
+      if (Number.isNaN(n)) {           // ignore garbage rather than coercing to bank 0
+        alert("DEST bank must be a non-negative integer (or blank for none).");
+        return;
+      }
+      blk.dest_bank = Math.max(0, n);
+    }
     state.dirty = true;
     resolveAndRender();
     return;
@@ -836,7 +845,15 @@ function wireToolbar() {
   });
   document.getElementById("grid-clocks").addEventListener("change", (e) => {
     const v = Math.max(1, parseInt(e.target.value, 10) || 1);
-    state.diagram.grid_clocks = v; state.dirty = true; render();
+    state.dirty = true;
+    if (state.isOps) {
+      // Edit the source (the view is derived) and re-solve so the change
+      // renders and persists on Save.
+      state.source.grid_clocks = v;
+      resolveAndRender();
+    } else {
+      state.diagram.grid_clocks = v; render();
+    }
   });
   document.getElementById("px-per-clock").addEventListener("change", (e) => {
     const v = Math.max(0.05, parseFloat(e.target.value) || 0.6);
