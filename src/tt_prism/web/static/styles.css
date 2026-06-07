@@ -81,3 +81,9 @@ aside h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-s
 
 dialog { border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 340px; }
 dialog::backdrop { background: rgba(15, 23, 42, 0.4); }
+
+.op-banner {
+  margin: 8px; padding: 8px 12px; border-radius: 6px;
+  background: #fef3c7; border: 1px solid #f0c869; color: #5b4708; font-size: 13px;
+}
+button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }

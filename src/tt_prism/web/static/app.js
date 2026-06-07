@@ -6,7 +6,9 @@
 const PALETTE = ["#ef9a9a","#90caf9","#a5d6a7","#ffcc80","#ce93d8","#80cbc4","#fff59d","#bcaaa4"];
 
 const state = {
-  diagram: null,
+  diagram: null,   // the diagram being *rendered* (== view; for ops this is the scheduled flattening)
+  source: null,    // the authored diagram that gets saved (carries `ops` for op-diagrams)
+  isOps: false,    // op-authored diagram → positions are derived, editor is read-only except durations/banks
   path: null,
   pxPerClock: 0.6,
   laneHeight: 72,
@@ -319,6 +321,7 @@ function itemMatchesFilter(item) {
 // -------- drag & dependency mode --------
 function onItemMouseDown(e, item) {
   if (state.depMode) return; // click, not drag, in link mode
+  if (state.isOps) return;   // op-diagram positions are derived; no move-drag
   if (e.button !== 0) return;
   e.preventDefault();
   if (!state.selection.has(item.id) && !e.shiftKey) {
@@ -464,6 +467,31 @@ function updateInspector() {
   form.start_clock.value = item.start_clock;
   form.duration_clocks.value = item.duration_clocks;
   form.tags.value = (item.tags || []).join(",");
+
+  // Op mode: positions/identity are derived — only duration + DEST bank are
+  // editable; everything else is shown read-only, and a re-solve runs on Apply.
+  const bankRow = document.getElementById("insp-bank-row");
+  if (state.isOps) {
+    const blk = sourceBlockById(item.id);
+    for (const name of ["id", "label", "lane_id", "resource_id", "start_clock", "tags"]) {
+      if (form[name]) form[name].disabled = true;
+    }
+    form.duration_clocks.disabled = false;
+    if (blk) form.duration_clocks.value = blk.duration_clocks;
+    if (bankRow) {
+      bankRow.hidden = false;
+      form.dest_bank.value = blk && blk.dest_bank != null ? blk.dest_bank : "";
+    }
+    const del = document.getElementById("btn-delete-item");
+    if (del) del.disabled = true;
+  } else {
+    for (const name of ["id", "label", "lane_id", "resource_id", "start_clock", "tags", "duration_clocks"]) {
+      if (form[name]) form[name].disabled = false;
+    }
+    if (bankRow) bankRow.hidden = true;
+    const del = document.getElementById("btn-delete-item");
+    if (del) del.disabled = false;
+  }
 }
 
 function updateSelectionInfo() {
@@ -489,6 +517,18 @@ function onInspectorSubmit(ev) {
   const item = itemById(id);
   if (!item) return;
   const fd = new FormData(ev.target);
+
+  // Op mode: edit only the backing block's duration + DEST bank, then re-solve.
+  if (state.isOps) {
+    const blk = sourceBlockById(id);
+    if (!blk) return;
+    blk.duration_clocks = Math.max(1, parseInt(fd.get("duration_clocks"), 10) || 1);
+    const bankRaw = (fd.get("dest_bank") || "").toString().trim();
+    blk.dest_bank = bankRaw === "" ? null : Math.max(0, parseInt(bankRaw, 10) || 0);
+    state.dirty = true;
+    resolveAndRender();
+    return;
+  }
   const newId = fd.get("id").toString().trim();
   if (newId !== item.id) {
     if (state.diagram.work_items.some(w => w.id === newId)) {
@@ -536,6 +576,7 @@ function addItem() {
   render();
 }
 function deleteSelection() {
+  if (state.isOps) return;   // op blocks are edited via their op, not deleted here
   const ids = new Set(state.selection);
   state.diagram.work_items = state.diagram.work_items.filter(w => !ids.has(w.id));
   state.diagram.dependencies = state.diagram.dependencies.filter(d => !ids.has(d.from) && !ids.has(d.to));
@@ -549,6 +590,7 @@ function deleteSelection() {
 // edges). Paste re-keys IDs and offsets clocks so the new items don't collide
 // with the originals, and applies the same offset to subsequent pastes.
 function copySelection() {
+  if (state.isOps) return;
   const ids = [...state.selection];
   if (ids.length === 0) return;
   const items = ids.map(itemById).filter(Boolean).map(w => JSON.parse(JSON.stringify(w)));
@@ -561,6 +603,7 @@ function copySelection() {
 }
 
 function pasteClipboard() {
+  if (state.isOps) return;
   if (!state.clipboard || state.clipboard.items.length === 0) return;
   const offsetClocks = Math.max(1, state.diagram.grid_clocks);
   // Find a non-colliding shift along the time axis by checking existing IDs.
@@ -680,8 +723,13 @@ async function loadFromServer() {
   const r = await fetch("/api/diagram");
   if (!r.ok) { alert("Failed to load"); return; }
   const body = await r.json();
-  state.diagram = body.diagram;
   state.path = body.path;
+  state.isOps = !!body.is_ops;
+  state.source = body.source;
+  // Render the `view`: for op-diagrams this is the server-scheduled flattening;
+  // for flat diagrams source and view are the same content, so we render the
+  // source object directly to keep edits and saves on one object.
+  state.diagram = state.isOps ? body.view : state.source;
   // normalize missing fields
   for (const w of state.diagram.work_items) if (!w.tags) w.tags = [];
   state.selection.clear();
@@ -689,14 +737,59 @@ async function loadFromServer() {
   // sync toolbar
   document.getElementById("grid-clocks").value = state.diagram.grid_clocks;
   document.getElementById("px-per-clock").value = state.pxPerClock;
+  applyOpModeUi();
   render();
 }
 
+// Toggle the editor chrome for op-authored (scheduled, mostly read-only) mode.
+function applyOpModeUi() {
+  const banner = document.getElementById("op-banner");
+  if (banner) banner.hidden = !state.isOps;
+  // Mutating controls that don't map onto op-authored diagrams are disabled.
+  const disabledInOps = [
+    "btn-add-item", "btn-add-lane", "btn-add-resource",
+    "btn-copy", "btn-paste", "btn-duplicate", "btn-batch-edit", "dep-mode",
+  ];
+  for (const id of disabledInOps) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = state.isOps;
+  }
+}
+
+// Re-solve the (edited) source on the server and refresh the rendered view.
+async function resolveAndRender() {
+  const r = await fetch("/api/solve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ diagram: state.source }),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    alert("Re-solve failed: " + txt);
+    return;
+  }
+  const body = await r.json();
+  state.diagram = body.view;
+  for (const w of state.diagram.work_items) if (!w.tags) w.tags = [];
+  render();
+}
+
+// Find the authored block (inside source.ops) backing a rendered work-item id.
+function sourceBlockById(id) {
+  if (!state.source || !state.source.ops) return null;
+  for (const op of state.source.ops) {
+    for (const b of op.blocks || []) if (b.id === id) return b;
+  }
+  return null;
+}
+
 async function saveToServer() {
+  // state.source is the authoritative editable document (it carries `ops` for
+  // op-diagrams; for flat diagrams it is the same object as state.diagram).
   const r = await fetch("/api/diagram", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ diagram: state.diagram }),
+    body: JSON.stringify({ diagram: state.source }),
   });
   if (!r.ok) {
     const txt = await r.text();
