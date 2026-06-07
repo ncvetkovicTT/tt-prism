@@ -1,0 +1,1064 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BH Fast-Untilize Dataflow</title>
+  <style>
+    :root {
+      --bg: #f6f5f1;
+      --ink: #18221f;
+      --muted: #5d6763;
+      --line: #c7cbc2;
+      --panel: #ffffff;
+      --panel-2: #fbfaf7;
+      --stage: #eef1ec;
+      --stage-active: #d8f1e7;
+      --stage-border: #98a39c;
+      --fast: #0f766e;
+      --regular: #8a5b12;
+      --tile0: #0f766e;
+      --tile1: #b45309;
+      --tile2: #b91c1c;
+      --tile3: #4d7c0f;
+      --shadow: 0 10px 26px rgba(24, 34, 31, 0.08);
+      --radius: 8px;
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    main {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+	    .subtitle {
+	      max-width: 980px;
+	      color: var(--muted);
+	      font-size: 15px;
+	      line-height: 1.45;
+	    }
+
+	    .subtitle strong {
+	      color: var(--ink);
+	    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    button {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid #8f9a93;
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--ink);
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: #1f6f63;
+      border-color: #1f6f63;
+      color: #ffffff;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 3px solid rgba(15, 118, 110, 0.35);
+      outline-offset: 2px;
+    }
+
+    .speed {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input[type="range"] {
+      accent-color: var(--fast);
+    }
+
+    .progress {
+      flex-basis: 100%;
+      height: 8px;
+      overflow: hidden;
+      background: #e7e6df;
+      border-radius: 999px;
+    }
+
+    .progress span {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: linear-gradient(90deg, #0f766e, #b45309);
+      transition: width 260ms ease;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(260px, 330px) 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .steps,
+    .notes,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .steps {
+      padding: 12px;
+      position: sticky;
+      top: 16px;
+    }
+
+    .steps h2,
+    .notes h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .step-button {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      width: 100%;
+      min-height: 44px;
+      padding: 8px;
+      margin: 0 0 6px;
+      text-align: left;
+      border-color: transparent;
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .step-button:hover {
+      background: #f1f2ed;
+    }
+
+    .step-button.active {
+      background: #e1f1e9;
+      border-color: #8ec5b6;
+    }
+
+    .step-index {
+      display: inline-grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border-radius: 50%;
+      background: #d8d8cf;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .step-button.active .step-index {
+      background: var(--fast);
+      color: white;
+    }
+
+    .step-copy {
+      display: grid;
+      gap: 2px;
+    }
+
+    .step-copy strong {
+      font-size: 13px;
+    }
+
+    .step-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .diagrams {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: grid;
+      gap: 4px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel-2);
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-title h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .badge.regular {
+      color: #6f4100;
+      background: #fff1d6;
+    }
+
+    .badge.fast {
+      color: #04584f;
+      background: #d9f4ec;
+    }
+
+    .panel-caption {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      min-height: 36px;
+    }
+
+    .diagram-scroll {
+      overflow-x: auto;
+      background:
+        linear-gradient(90deg, rgba(246, 245, 241, 0.88), rgba(246, 245, 241, 0)) 0 0 / 24px 100% no-repeat,
+        linear-gradient(270deg, rgba(246, 245, 241, 0.88), rgba(246, 245, 241, 0)) 100% 0 / 24px 100% no-repeat,
+        var(--panel);
+    }
+
+    .diagram {
+      position: relative;
+      width: 720px;
+      height: 390px;
+      margin: 0 auto;
+      background:
+        linear-gradient(#f9f9f6 1px, transparent 1px),
+        linear-gradient(90deg, #f9f9f6 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    .stage {
+      position: absolute;
+      width: 142px;
+      height: 216px;
+      top: 92px;
+      padding: 10px;
+      border: 1px solid var(--stage-border);
+      border-radius: 7px;
+      background: var(--stage);
+      transition: background 240ms ease, border-color 240ms ease, box-shadow 240ms ease;
+    }
+
+    .stage.active {
+      background: var(--stage-active);
+      border-color: #2b8f7f;
+      box-shadow: inset 0 0 0 2px rgba(15, 118, 110, 0.12);
+    }
+
+    .stage.input { left: 20px; }
+    .stage.srca { left: 188px; }
+    .stage.dest { left: 356px; }
+    .stage.output { left: 552px; }
+
+    .stage h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+
+    .stage .hint {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .wire {
+      position: absolute;
+      top: 190px;
+      height: 2px;
+      background: #a9afa8;
+    }
+
+    .wire::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: -4px;
+      width: 0;
+      height: 0;
+      border-left: 8px solid #a9afa8;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+    }
+
+    .wire.w1 { left: 162px; width: 26px; }
+    .wire.w2 { left: 330px; width: 26px; }
+    .wire.w3 { left: 498px; width: 54px; }
+
+    .token {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      width: 50px;
+      height: 24px;
+      border-radius: 5px;
+      color: white;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+      box-shadow: 0 4px 9px rgba(24, 34, 31, 0.18);
+      transition:
+        transform 620ms cubic-bezier(0.2, 0.75, 0.18, 1),
+        opacity 260ms ease,
+        filter 260ms ease;
+      z-index: 4;
+      will-change: transform;
+    }
+
+    .token.dimmed {
+      opacity: 0.36;
+      filter: saturate(0.45);
+    }
+
+    .token.tile0 { background: var(--tile0); }
+    .token.tile1 { background: var(--tile1); }
+    .token.tile2 { background: var(--tile2); }
+    .token.tile3 { background: var(--tile3); }
+
+    .legend {
+      position: absolute;
+      left: 20px;
+      right: 26px;
+      bottom: 18px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex: 0 0 auto;
+    }
+
+    .counters {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0 16px 14px;
+    }
+
+    .metric {
+      padding: 10px;
+      border: 1px solid #d9ddd5;
+      border-radius: 6px;
+      background: #fbfaf7;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 16px;
+    }
+
+	    .notes {
+	      margin-top: 16px;
+	      padding: 14px 16px;
+	    }
+
+	    .counts {
+	      margin-top: 16px;
+	      padding: 14px 16px;
+	      background: var(--panel);
+	      border: 1px solid var(--line);
+	      border-radius: var(--radius);
+	      box-shadow: var(--shadow);
+	    }
+
+	    .counts h2 {
+	      margin: 0 0 10px;
+	      font-size: 15px;
+	      letter-spacing: 0;
+	    }
+
+	    .counts-table {
+	      overflow-x: auto;
+	    }
+
+	    table {
+	      width: 100%;
+	      min-width: 760px;
+	      border-collapse: collapse;
+	      font-size: 12px;
+	    }
+
+	    th,
+	    td {
+	      padding: 9px 10px;
+	      text-align: left;
+	      vertical-align: top;
+	      border-bottom: 1px solid #e0e2dc;
+	    }
+
+	    th {
+	      color: #37423e;
+	      background: #f3f2ed;
+	      font-size: 11px;
+	      text-transform: uppercase;
+	      letter-spacing: 0.04em;
+	    }
+
+	    td {
+	      color: var(--muted);
+	      line-height: 1.35;
+	    }
+
+	    td strong {
+	      color: var(--ink);
+	    }
+
+	    .count-note {
+	      margin-top: 10px;
+	      color: var(--muted);
+	      font-size: 12px;
+	      line-height: 1.45;
+	    }
+
+	    .notes-grid {
+	      display: grid;
+	      grid-template-columns: repeat(4, minmax(0, 1fr));
+	      gap: 12px;
+	    }
+
+    .note {
+      padding: 10px;
+      border: 1px solid #d9ddd5;
+      border-radius: 6px;
+      background: #fbfaf7;
+    }
+
+    .note h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+    }
+
+    .note p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.42;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.94em;
+    }
+
+    @media (max-width: 1180px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .steps {
+        position: static;
+      }
+    }
+
+    @media (max-width: 980px) {
+      main {
+        padding: 16px;
+      }
+
+	      .diagrams,
+	      .notes-grid {
+	        grid-template-columns: 1fr;
+	      }
+
+      .speed {
+        width: 100%;
+        margin-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>BH Fast-Untilize Dataflow</h1>
+	      <div class="subtitle">
+	        Animated 4-tile row example for the regular <code>pack_untilize</code> path and the
+	        new BH <code>fast_untilize</code> path. Tokens represent face-pair slices of tiles:
+	        <code>F0/1</code> is the top half of a tile and <code>F2/3</code> is the bottom half.
+	        <strong>The animation is phase-level; the instruction-count differences are in the table below.</strong>
+	      </div>
+    </header>
+
+    <section class="controls" aria-label="Animation controls">
+      <button id="prev">Previous</button>
+      <button id="play" class="primary">Play</button>
+      <button id="next">Next</button>
+      <button id="reset">Reset</button>
+      <label class="speed" for="speed">
+        Speed
+        <input id="speed" type="range" min="700" max="2600" step="100" value="1500">
+      </label>
+      <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+    </section>
+
+    <section class="workspace">
+      <aside class="steps">
+        <h2>Step Timeline</h2>
+        <div id="stepList"></div>
+      </aside>
+
+      <div>
+        <section class="diagrams">
+          <article class="panel" data-flow="regular">
+            <div class="panel-header">
+              <div class="panel-title">
+                <h2>Regular pack_untilize</h2>
+                <span class="badge regular">existing path</span>
+              </div>
+              <div class="panel-caption" id="regularCaption"></div>
+            </div>
+            <div class="diagram-scroll">
+              <div class="diagram" id="regularDiagram">
+                <div class="stage input"><h3>Input L1</h3><div class="hint">Tiled CB data.</div></div>
+                <div class="stage srca"><h3>SrcA</h3><div class="hint">One tile at a time.</div></div>
+                <div class="stage dest"><h3>DEST</h3><div class="hint">Standard tile slots.</div></div>
+                <div class="stage output"><h3>Output L1</h3><div class="hint">Row-major result.</div></div>
+                <div class="wire w1"></div>
+                <div class="wire w2"></div>
+                <div class="wire w3"></div>
+                <div class="legend">
+                  <div class="legend-item"><span class="dot" style="background:var(--tile0)"></span>T0</div>
+                  <div class="legend-item"><span class="dot" style="background:var(--tile1)"></span>T1</div>
+                  <div class="legend-item"><span class="dot" style="background:var(--tile2)"></span>T2</div>
+                  <div class="legend-item"><span class="dot" style="background:var(--tile3)"></span>T3</div>
+                </div>
+              </div>
+            </div>
+	            <div class="counters">
+	              <div class="metric">
+	                <span>Unpack trace</span>
+	                <strong>16 UNPACR + 24 NOP</strong>
+	              </div>
+	              <div class="metric">
+	                <span>4-tile pack work</span>
+	                <strong>128 PACRs</strong>
+	              </div>
+	            </div>
+          </article>
+
+          <article class="panel" data-flow="fast">
+            <div class="panel-header">
+              <div class="panel-title">
+                <h2>BH fast_untilize</h2>
+                <span class="badge fast">new path</span>
+              </div>
+              <div class="panel-caption" id="fastCaption"></div>
+            </div>
+            <div class="diagram-scroll">
+              <div class="diagram" id="fastDiagram">
+                <div class="stage input"><h3>Input L1</h3><div class="hint">Tiled CB data.</div></div>
+                <div class="stage srca"><h3>SrcA</h3><div class="hint">2/3/4-tile chunk.</div></div>
+                <div class="stage dest"><h3>DEST</h3><div class="hint">Pack-friendly layout.</div></div>
+                <div class="stage output"><h3>Output L1</h3><div class="hint">Row-major strip.</div></div>
+                <div class="wire w1"></div>
+                <div class="wire w2"></div>
+                <div class="wire w3"></div>
+                <div class="legend">
+                  <div class="legend-item"><span class="dot" style="background:var(--tile0)"></span>T0</div>
+                  <div class="legend-item"><span class="dot" style="background:var(--tile1)"></span>T1</div>
+                  <div class="legend-item"><span class="dot" style="background:var(--tile2)"></span>T2</div>
+                  <div class="legend-item"><span class="dot" style="background:var(--tile3)"></span>T3</div>
+                </div>
+              </div>
+            </div>
+	            <div class="counters">
+	              <div class="metric">
+	                <span>Unpack trace</span>
+	                <strong>16 UNPACR + 0 NOP</strong>
+	              </div>
+	              <div class="metric">
+	                <span>4-tile pack work</span>
+	                <strong>64 PACRs</strong>
+	              </div>
+	            </div>
+	          </article>
+	        </section>
+
+	        <section class="counts">
+	          <h2>Instruction Work For This Example</h2>
+	          <div class="counts-table">
+	            <table>
+	              <thead>
+	                <tr>
+	                  <th>What is counted</th>
+	                  <th>Regular pack_untilize</th>
+	                  <th>BH fast_untilize</th>
+	                  <th>Why it matters</th>
+	                </tr>
+	              </thead>
+	              <tbody>
+	                <tr>
+	                  <td><strong>Unpack LLK calls</strong></td>
+	                  <td><strong>4</strong> calls to <code>llk_unpack_A</code>, one per tile.</td>
+	                  <td><strong>1</strong> call to <code>llk_unpack_fast_untilize_block</code> for <code>unit_dim=4</code>.</td>
+	                  <td>Fast reduces per-tile unpack-call overhead for the common non-BFP path.</td>
+	                </tr>
+	                <tr>
+	                  <td><strong>Real UNPACR reads</strong></td>
+	                  <td><strong>16</strong>: four faces per tile times four tiles.</td>
+	                  <td><strong>16</strong>: same face data must be read.</td>
+	                  <td>This is not the main fast-path win; both paths move the same input payload.</td>
+	                </tr>
+	                <tr>
+	                  <td><strong>Zero SrcB dvalid sideband</strong></td>
+	                  <td><strong>24</strong> traced generic <code>UNPACR_NOP</code> dvalids.</td>
+	                  <td><strong>0</strong> for 16-bit DEST; <strong>16</strong> only for native fp32 DEST.</td>
+	                  <td>Fast avoids generic zero-SrcB sideband traffic when math can copy SrcA directly with <code>MOVA2D</code>.</td>
+	                </tr>
+	                <tr>
+	                  <td><strong>Pack MOP runs</strong></td>
+	                  <td><strong>2</strong>: top strip, then bottom strip.</td>
+	                  <td><strong>2</strong>: top strip, then bottom strip.</td>
+	                  <td>The phase count is the same, so the animation has the same two pack phases.</td>
+	                </tr>
+	                <tr>
+	                  <td><strong>PACR instructions</strong></td>
+	                  <td><strong>128</strong>: 16 rows x 4 tiles x 2 phases.</td>
+	                  <td><strong>64</strong>: 16 rows x 2 PACRs x 2 phases.</td>
+	                  <td>Fast halves pack-side PACR count for a full 4-tile chunk.</td>
+	                </tr>
+	                <tr>
+	                  <td><strong>Full PACR read width</strong></td>
+	                  <td><strong>2 interfaces</strong> (<code>read_intf_sel=3</code>), one 32-datum row fragment.</td>
+	                  <td><strong>4 interfaces</strong> (<code>read_intf_sel=0</code>), one 64-datum row fragment.</td>
+	                  <td>Math writes a DEST layout that lets pack read wider row-major strips.</td>
+	                </tr>
+	              </tbody>
+	            </table>
+	          </div>
+	          <div class="count-note">
+	            Assumptions: four-face tiles, <code>full_ct_dim=4</code>, <code>unit_dim=4</code>,
+	            non-BFP input, and 16-bit DEST copy. Compressed BFP keeps per-tile addressing on
+	            unpack; native fp32 DEST keeps the zero-SrcB dvalid sideband. The animation steps
+	            are dataflow phases, not one instruction per step; both paths have top and bottom
+	            pack phases, but the trace shows 128 regular PACRs versus 64 fast PACRs inside
+	            those phases. Trace anchor:
+	            <code>test_fast_untilize[Float16_b-&gt;Float16_b, (1,4), dest_acc=No]</code> and
+	            <code>test_zzz_pack_untilize[Float16_b-&gt;Float16_b, [32,128], dest_acc=No]</code>
+	            both passed under an env-gated ttsim trace of executed <code>UNPACR</code>,
+	            <code>UNPACR_NOP</code>, and <code>PACR</code> instructions.
+	          </div>
+	        </section>
+
+	        <section class="notes">
+	          <h2>Implementation Notes</h2>
+          <div class="notes-grid">
+	            <div class="note">
+	              <h3>Regular path</h3>
+	              <p>
+	                <code>pack_untilize_block</code> loops over input tiles, unpacks each tile,
+	                copies each tile into a standard DEST slot, then <code>llk_pack_untilize</code>
+	                emits row-major output with two active packer interfaces for 4-face tiles.
+	                For the shown 4-tile row, the packer performs 64 top-strip PACRs and
+	                64 bottom-strip PACRs.
+	              </p>
+	            </div>
+	            <div class="note">
+	              <h3>Fast path</h3>
+	              <p>
+	                <code>fast_untilize_block</code> works in 2/3/4-tile units. Math writes a
+	                custom DEST layout so pack can use <code>STRIDED_MODE</code> and four
+	                active interfaces for full-width PACRs. For the shown 4-tile row, the
+	                packer performs 32 top-strip PACRs and 32 bottom-strip PACRs.
+	              </p>
+	            </div>
+	            <div class="note">
+	              <h3>Trace basis</h3>
+	              <p>
+	                Counts are trace-checked against current ttsim and then tied back to the LLK source:
+	                <code>llk_unpack_A.h</code>, <code>llk_pack_untilize.h</code>,
+	                <code>llk_unpack_fast_untilize.h</code>, and
+	                <code>llk_pack_fast_untilize.h</code>.
+	              </p>
+	            </div>
+	            <div class="note">
+	              <h3>Wider rows</h3>
+	              <p>
+	                Rows wider than four tiles repeat the same unit flow. The strided pack
+	                variant closes each chunk row and advances output L1 by one full row stride.
+	                The direct small-CT path avoids materializing decomposition state.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const steps = [
+      {
+        title: "Input row in L1",
+        short: "Four tiled input tiles are ready in the input CB.",
+        regular: "Input L1 contains T0..T3 in tiled layout. Nothing has entered SrcA or DEST yet.",
+        fast: "The fast path starts from the same tiled L1 input row. This example uses one unit_dim=4 chunk."
+      },
+	      {
+	        title: "Unpack",
+	        short: "Regular makes four tile calls; fast makes one chunk call.",
+	        regular: "Regular pack_untilize calls generic llk_unpack_A once per tile. The traced 4-tile row executes 16 real UNPACR reads and 24 SrcB dvalid UNPACR_NOP sideband instructions.",
+	        fast: "Fast-untilize uses one chunk unpack call for unit_dim=4. The traced 4-tile row still executes 16 real UNPACR reads, but for 16-bit DEST it skips the generic zero-SrcB dvalid NOPs. Native fp32 DEST and compressed BFP are exceptions noted below."
+	      },
+	      {
+	        title: "Math copy into DEST",
+	        short: "Regular builds standard tile slots; fast builds pack-friendly rows.",
+        regular: "Regular math datacopy moves T0 to its standard DEST tile slot and proceeds tile-by-tile.",
+        fast: "Fast math places faces into the layout expected by pack: top face pairs grouped first, bottom face pairs grouped second."
+      },
+      {
+        title: "Regular tile loop complete",
+        short: "Regular finishes the per-tile unpack/math loop.",
+        regular: "All four regular-path tiles are now in standard DEST slots. Pack can now untilize from this layout.",
+        fast: "Fast-untilize already has the full chunk in its custom DEST layout and is ready for pack phase 1."
+      },
+	      {
+	        title: "Pack top strip",
+	        short: "Same top-strip phase, different PACR count.",
+	        regular: "Regular pack_untilize uses read_intf_sel=3, so each PACR reads two interfaces. It loops over four tile slots: 16 rows x 4 tiles = 64 PACRs for the top strip.",
+	        fast: "Fast pack phase 1 uses read_intf_sel=0 with STRIDED_MODE, so each PACR reads all four interfaces. That reduces the top strip to 16 rows x 2 PACRs = 32 PACRs."
+	      },
+	      {
+	        title: "Pack bottom strip",
+	        short: "Bottom strip repeats the same PACR ratio.",
+	        regular: "Regular pack_untilize emits the bottom face rows with another 64 PACRs and closes the output tile stream.",
+	        fast: "Fast pack phase 2 switches the remapped DEST target offset, emits the bottom strip with another 32 PACRs, and sets Last=1 to close the contiguous L1 stream."
+	      },
+	      {
+	        title: "Output row complete",
+	        short: "The row-major output strip is complete.",
+	        regular: "Regular path is correct but uses 128 pack-side PACRs for the same 4-tile row-major output.",
+	        fast: "Fast-untilize produces the same row-major layout with 64 pack-side PACRs and less generic unpack sideband traffic in the common 16-bit DEST case."
+	      }
+    ];
+
+    const tokens = [];
+    for (let tile = 0; tile < 4; tile += 1) {
+      tokens.push({ tile, group: 0, label: `T${tile} F0/1` });
+      tokens.push({ tile, group: 1, label: `T${tile} F2/3` });
+    }
+
+    const stageForStep = {
+      regular: [
+        () => "input",
+        (t) => t.tile === 0 ? "srca" : "input",
+        (t) => t.tile === 0 ? "dest" : (t.tile === 1 ? "srca" : "input"),
+        () => "dest",
+        (t) => t.group === 0 ? "output" : "dest",
+        () => "output",
+        () => "output"
+      ],
+      fast: [
+        () => "input",
+        () => "srca",
+        () => "dest",
+        () => "dest",
+        (t) => t.group === 0 ? "output" : "dest",
+        () => "output",
+        () => "output"
+      ]
+    };
+
+    const stageActive = {
+      regular: [
+        ["input"],
+        ["input", "srca"],
+        ["srca", "dest"],
+        ["dest"],
+        ["dest", "output"],
+        ["dest", "output"],
+        ["output"]
+      ],
+      fast: [
+        ["input"],
+        ["input", "srca"],
+        ["srca", "dest"],
+        ["dest"],
+        ["dest", "output"],
+        ["dest", "output"],
+        ["output"]
+      ]
+    };
+
+    const anchors = {
+      input:  { x: 20, y: 92 },
+      srca:   { x: 188, y: 92 },
+      dest:   { x: 356, y: 92 },
+      output: { x: 552, y: 92 }
+    };
+
+    let currentStep = 0;
+    let timer = null;
+
+    const regularDiagram = document.getElementById("regularDiagram");
+    const fastDiagram = document.getElementById("fastDiagram");
+    const regularCaption = document.getElementById("regularCaption");
+    const fastCaption = document.getElementById("fastCaption");
+    const stepList = document.getElementById("stepList");
+    const progress = document.getElementById("progress");
+    const playButton = document.getElementById("play");
+    const speedInput = document.getElementById("speed");
+
+    function makeTokenElement(flow, token) {
+      const el = document.createElement("div");
+      el.className = `token tile${token.tile}`;
+      el.textContent = token.label;
+      el.dataset.flow = flow;
+      el.dataset.tile = String(token.tile);
+      el.dataset.group = String(token.group);
+      return el;
+    }
+
+    function createTokens(diagram, flow) {
+      tokens.forEach((token) => diagram.appendChild(makeTokenElement(flow, token)));
+    }
+
+    function positionFor(flow, stage, token) {
+      const base = anchors[stage];
+      const tile = token.tile;
+      const group = token.group;
+
+      if (stage === "input") {
+        return {
+          x: base.x + 16 + group * 58,
+          y: base.y + 58 + tile * 36
+        };
+      }
+
+      if (stage === "srca") {
+        if (flow === "regular") {
+          return {
+            x: base.x + 46 + group * 6,
+            y: base.y + 70 + group * 34
+          };
+        }
+        return {
+          x: base.x + 16 + (tile % 2) * 58,
+          y: base.y + 48 + Math.floor(tile / 2) * 34 + group * 78
+        };
+      }
+
+      if (stage === "dest") {
+        if (flow === "regular") {
+          return {
+            x: base.x + 16 + group * 58,
+            y: base.y + 58 + tile * 36
+          };
+        }
+        return {
+          x: base.x + 16 + (tile % 2) * 58,
+          y: base.y + 48 + Math.floor(tile / 2) * 34 + group * 94
+        };
+      }
+
+      return {
+        x: base.x + 16 + (tile % 2) * 58,
+        y: base.y + 48 + Math.floor(tile / 2) * 34 + group * 94
+      };
+    }
+
+    function updateStageHighlights(diagram, flow) {
+      const active = new Set(stageActive[flow][currentStep]);
+      diagram.querySelectorAll(".stage").forEach((stage) => {
+        const name = ["input", "srca", "dest", "output"].find((key) => stage.classList.contains(key));
+        stage.classList.toggle("active", active.has(name));
+      });
+    }
+
+    function updateTokens(diagram, flow) {
+      diagram.querySelectorAll(".token").forEach((el) => {
+        const token = {
+          tile: Number(el.dataset.tile),
+          group: Number(el.dataset.group)
+        };
+        const stage = stageForStep[flow][currentStep](token);
+        const pos = positionFor(flow, stage, token);
+        el.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+
+        const dimRegular = flow === "regular" && currentStep === 1 && token.tile > 0;
+        const dimFast = flow === "fast" && currentStep === 4 && token.group === 1;
+        el.classList.toggle("dimmed", dimRegular || dimFast);
+      });
+    }
+
+    function renderStepList() {
+      stepList.innerHTML = "";
+      steps.forEach((step, index) => {
+        const button = document.createElement("button");
+        button.className = "step-button";
+        button.type = "button";
+        button.innerHTML = `
+          <span class="step-index">${index + 1}</span>
+          <span class="step-copy">
+            <strong>${step.title}</strong>
+            <span>${step.short}</span>
+          </span>
+        `;
+        button.addEventListener("click", () => {
+          stop();
+          setStep(index);
+        });
+        stepList.appendChild(button);
+      });
+    }
+
+    function updateStepList() {
+      [...stepList.children].forEach((button, index) => {
+        button.classList.toggle("active", index === currentStep);
+      });
+    }
+
+    function setStep(index) {
+      currentStep = (index + steps.length) % steps.length;
+      regularCaption.textContent = steps[currentStep].regular;
+      fastCaption.textContent = steps[currentStep].fast;
+      progress.style.width = `${(currentStep / (steps.length - 1)) * 100}%`;
+      updateStepList();
+      updateStageHighlights(regularDiagram, "regular");
+      updateStageHighlights(fastDiagram, "fast");
+      updateTokens(regularDiagram, "regular");
+      updateTokens(fastDiagram, "fast");
+    }
+
+    function nextStep() {
+      if (currentStep === steps.length - 1) {
+        setStep(0);
+      } else {
+        setStep(currentStep + 1);
+      }
+    }
+
+    function stop() {
+      if (timer !== null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+      playButton.textContent = "Play";
+    }
+
+    function play() {
+      stop();
+      playButton.textContent = "Pause";
+      timer = window.setInterval(nextStep, Number(speedInput.value));
+    }
+
+    document.getElementById("prev").addEventListener("click", () => {
+      stop();
+      setStep(currentStep - 1);
+    });
+
+    document.getElementById("next").addEventListener("click", () => {
+      stop();
+      setStep(currentStep + 1);
+    });
+
+    document.getElementById("reset").addEventListener("click", () => {
+      stop();
+      setStep(0);
+    });
+
+    playButton.addEventListener("click", () => {
+      if (timer === null) {
+        play();
+      } else {
+        stop();
+      }
+    });
+
+    speedInput.addEventListener("input", () => {
+      if (timer !== null) {
+        play();
+      }
+    });
+
+    createTokens(regularDiagram, "regular");
+    createTokens(fastDiagram, "fast");
+    renderStepList();
+    setStep(0);
+  </script>
+</body>
+</html>

@@ -115,12 +115,16 @@ def build_edges(diagram: Diagram) -> list[Edge]:
         for prev, nxt in zip(op.blocks, op.blocks[1:]):
             edges.append(Edge(prev.id, nxt.id, gap=0, reason="intra_op"))
 
-    # resource + lane serialization: chain same-key blocks in program order
-    def _serialize(key: str, reason: str) -> None:
-        groups: dict[str, list[str]] = defaultdict(list)
+    # resource + lane + dest-bank serialization: chain same-key blocks in program
+    # order. dest_bank skips blocks that don't touch DEST (dest_bank is None).
+    def _serialize(key: str, reason: str, skip_none: bool = False) -> None:
+        groups: dict[object, list[str]] = defaultdict(list)
         for op in diagram.ops:
             for b in op.blocks:
-                groups[getattr(b, key)].append(b.id)
+                v = getattr(b, key)
+                if skip_none and v is None:
+                    continue
+                groups[v].append(b.id)
         for ids in groups.values():
             ids.sort(key=lambda bid: seq[bid])
             for a, b in zip(ids, ids[1:]):
@@ -128,6 +132,7 @@ def build_edges(diagram: Diagram) -> list[Edge]:
 
     _serialize("resource_id", "resource")
     _serialize("lane_id", "lane")
+    _serialize("dest_bank", "dest_bank", skip_none=True)
 
     # explicit dependencies (cross-op data deps etc.)
     for d in diagram.dependencies:
@@ -201,6 +206,7 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
     from tt_prism.models import Dependency, WorkItem
 
     sched = solve(diagram)
+    bank_of = {b.id: b.dest_bank for op in diagram.ops for b in op.blocks}
     work_items = [
         WorkItem(
             id=b.block_id,
@@ -209,7 +215,7 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
             label=b.label,
             start_clock=b.start_clock,
             duration_clocks=b.duration_clocks,
-            tags=[b.op_id, *b.tags],
+            tags=[b.op_id, *( [f"dest{bank_of[b.block_id]}"] if bank_of.get(b.block_id) is not None else [] ), *b.tags],
         )
         for b in sched.blocks
     ]

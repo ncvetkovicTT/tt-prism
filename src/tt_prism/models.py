@@ -68,6 +68,12 @@ class Block(BaseModel):
     resource_id: str
     label: str = ""
     duration_clocks: int = 1
+    # Which virtual DEST bank this block writes (MATH: FPU/SFPU) or reads (PACK).
+    # DEST is split in software into `Diagram.dest_banks` banks so PACK can drain
+    # one bank while MATH fills another. Blocks sharing a bank are serialized:
+    # MATH cannot reuse a bank until the PACK that last read it has finished.
+    # None for blocks that don't touch DEST (e.g. UNPACK).
+    dest_bank: int | None = None
     tags: list[str] = Field(default_factory=list)
 
 
@@ -112,6 +118,7 @@ class Diagram(BaseModel):
     title: str = "Untitled pipeline"
     clock_ghz: float | None = None
     grid_clocks: int = 8
+    dest_banks: int = 2      # number of virtual DEST banks software splits DEST into
     lanes: list[Lane] = Field(default_factory=list)
     resources: list[Resource] = Field(default_factory=list)
     work_items: list[WorkItem] = Field(default_factory=list)
@@ -154,6 +161,11 @@ class Diagram(BaseModel):
                 if b.resource_id not in resource_ids:
                     raise ValueError(
                         f"block {b.id} (op {op.id}) references unknown resource {b.resource_id}"
+                    )
+                if b.dest_bank is not None and not (0 <= b.dest_bank < self.dest_banks):
+                    raise ValueError(
+                        f"block {b.id} (op {op.id}) uses dest_bank {b.dest_bank} "
+                        f"but dest_banks={self.dest_banks} (valid 0..{self.dest_banks - 1})"
                     )
         # A dependency endpoint may name a work-item, a block, or an op.
         ref_ids = item_ids | block_ids | op_ids

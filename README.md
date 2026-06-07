@@ -190,6 +190,13 @@ The scheduler (`schedule.py`) computes each block's start as the longest path
   overlap.
 - **explicit dependencies** — e.g. `l1_data` (`c = a + b` then `e = d * c`:
   can't unpack `c` until it's packed to L1). `min_gap_clocks` adds sync latency.
+- **virtual DEST banks** — DEST is split in software into `dest_banks` banks (2
+  by default) so PACK can drain one bank while MATH fills another. A block sets
+  `dest_bank: 0|1|…` (MATH writes it, PACK reads it); blocks sharing a bank
+  serialize, so MATH can't reuse a bank until the PACK that last read it has
+  finished. Alternating banks across ops is what lets MATH overlap PACK — see
+  `examples/ops_dest_banks.yaml` (set every `dest_bank` to 0 to watch the
+  makespan grow as it single-buffers).
 
 Because placement is derived, *moving or resizing any block reflows everything
 downstream automatically*. New semantic dependency `kind`s — `src_valid`,
