@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>tt-prism — flow view</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
+<link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+<header>
+  <div class="title">
+    <strong>tt-prism</strong>
+    <span class="path">flow view · {{ diagram_path }}</span>
+  </div>
+  <div class="toolbar">
+    <a class="linkbtn" href="/">← Editor (Gantt)</a>
+    <span class="sep"></span>
+    <button id="prev" title="Previous step">◀ Prev</button>
+    <button id="play" class="primary" title="Play / pause">▶ Play</button>
+    <button id="next" title="Next step">Next ▶</button>
+    <button id="reset" title="Back to first step">Reset</button>
+    <span id="step-info" class="status"></span>
+  </div>
+</header>
+<main class="flow-main">
+  <aside class="flow-ops">
+    <h3>Ops</h3>
+    <div id="op-list" class="op-list muted">Loading…</div>
+  </aside>
+
+  <section class="flow-center">
+    <div id="op-title" class="flow-op-title"></div>
+    <div id="diagram" class="flow-diagram"></div>
+    <div id="step-caption" class="flow-caption muted"></div>
+  </section>
+
+  <aside class="flow-steps">
+    <h3>Steps</h3>
+    <ol id="step-list" class="step-list muted">—</ol>
+  </aside>
+</main>
+<script src="/static/flow.js" type="module"></script>
+</body>
+</html>

@@ -99,6 +99,28 @@ class Block(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+# Canonical Tensix storage stages a tile passes through, used by the flow view.
+FlowStageKind = Literal["l1_in", "srca", "srcb", "dest", "sfpu", "l1_out"]
+
+OpCategory = Literal["init", "execute"]
+
+
+class FlowStep(BaseModel):
+    """One dataflow step inside an *execute* op, for the flow view: a tile (or
+    face) moves from the ``reads`` stages to the ``writes`` stages (e.g. unpack
+    L1→SrcA, math SrcA/SrcB→DEST, reuse DEST→SrcB via MOVD2B, pack DEST→L1).
+    ``expr`` optionally records what now lives in DEST (e.g. ``DEST += A·B``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = ""
+    label: str
+    reads: list[FlowStageKind] = Field(default_factory=list)
+    writes: list[FlowStageKind] = Field(default_factory=list)
+    expr: str = ""
+    note: str = ""
+
+
 class Op(BaseModel):
     """One Compute API call (e.g. mm_init, reduce_tile, pack_untilize_dest),
     which wraps one or more LLK calls. This is the lowest granularity tt-prism
@@ -112,7 +134,20 @@ class Op(BaseModel):
     kind: str = ""           # free-form: "matmul", "reduce", ... (drives nothing yet)
     tiles: int = 1           # number of tiles operated on (metadata for now)
     core_id: str | None = None  # which Core this op runs on (None → the single/default core)
+    # Op category. None → inferred: an op whose name/kind mentions "init"
+    # (init, reinit, mm_init, …) is an init op; everything else is execute.
+    # The flow view only applies to execute ops.
+    category: OpCategory | None = None
+    # Optional explicit dataflow for the flow view. If empty, a generic
+    # unpack→math→pack flow is derived from the op's blocks (see flow.py).
+    flow: list[FlowStep] = Field(default_factory=list)
     blocks: list[Block] = Field(default_factory=list)
+
+    @property
+    def is_init(self) -> bool:
+        if self.category is not None:
+            return self.category == "init"
+        return "init" in f"{self.name} {self.kind}".lower()
 
     @property
     def first_block(self) -> Block | None:

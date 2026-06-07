@@ -305,6 +305,40 @@ and a core header, so cores are visually decoupled. See
 [`examples/ops_multicore.yaml`](examples/ops_multicore.yaml). Single-core
 diagrams (no `cores` declared) render exactly as before.
 
+### Flow view (per-op dataflow)
+
+Alongside the Gantt timeline, the web app has a **flow view** (`/flow`, or the
+"Flow view →" button in the editor) that shows, for one *execute* op at a time,
+how a tile moves through the Tensix storage stages — Input L1 → SrcA/SrcB →
+DEST → SFPU → Output L1 — one step at a time, with tile tokens hopping between
+stages and the active stages highlighting.
+
+- The left column lists the ops in YAML order. **Init ops** (whose name/kind
+  mentions `init`/`reinit`, or `category: init`) have no dataflow and are
+  greyed out; everything else is an **execute** op you can open.
+- Steps come from the op's explicit `flow:` if authored, else a generic
+  unpack→math→pack flow is derived from its blocks (and marked "derived").
+
+```yaml
+ops:
+  - id: mexp
+    name: "matmul + exp"
+    kind: matmul
+    tiles: 4
+    flow:                       # each step: which stages it reads/writes (+ optional DEST expr)
+      - { label: "Unpack A & B",        reads: [l1_in],       writes: [srca, srcb] }
+      - { label: "Multiply-accumulate", reads: [srca, srcb],  writes: [dest], expr: "DEST += A·B" }
+      - { label: "Reuse via MOVD2B",    reads: [dest],        writes: [srcb] }
+      - { label: "Load to SFPU",        reads: [dest],        writes: [sfpu] }
+      - { label: "exp() then store",    reads: [sfpu],        writes: [dest], expr: "DEST = exp(acc)" }
+      - { label: "Pack to L1",          reads: [dest],        writes: [l1_out] }
+    blocks: [ ... ]             # the Gantt-side timing (unchanged)
+```
+
+Stage vocabulary: `l1_in`, `srca`, `srcb`, `dest`, `sfpu`, `l1_out`. See
+[`examples/ops_flow_demo.yaml`](examples/ops_flow_demo.yaml). (Multi-core flow —
+cores as interacting blocks linked by NoC steps — is the next increment.)
+
 ## Architecture
 
 ```

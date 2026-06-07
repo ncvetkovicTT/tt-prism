@@ -1,0 +1,57 @@
+# Flow-view demo (single core). Open the editor then click "Flow view →", or:
+#   tt-prism serve examples/ops_flow_demo.yaml   →   http://127.0.0.1:8765/flow
+#
+# - mm_init is an *init* op (name contains "init") → greyed in the flow view.
+# - matmul_exp authors an explicit `flow:` showing the full dataflow:
+#   unpack → math+accumulate → MOVD2B reuse → math → SFPU load → store → pack.
+# - copy_tiles has no `flow:`, so the view derives a generic unpack→math→pack.
+
+title: "flow-view demo"
+clock_ghz: 1.0
+grid_clocks: 32
+
+lanes:
+  - { id: trisc0, name: "TRISC 0", order: 0 }
+  - { id: trisc1, name: "TRISC 1", order: 1 }
+  - { id: trisc2, name: "TRISC 2", order: 2 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+ops:
+  - id: mmi
+    name: "mm_init"          # → init (no flow)
+    kind: init
+    blocks:
+      - { id: mmi_c, lane_id: trisc1, resource_id: fpu, label: "configure", duration_clocks: 16 }
+
+  - id: mexp
+    name: "matmul + exp"
+    kind: matmul
+    tiles: 4
+    flow:
+      - { id: f1, label: "Unpack A & B",            reads: [l1_in],       writes: [srca, srcb], note: "tiles read from the CB into the source registers" }
+      - { id: f2, label: "Math: multiply-accumulate", reads: [srca, srcb], writes: [dest], expr: "DEST += A·B" }
+      - { id: f3, label: "Reuse partial via MOVD2B", reads: [dest],        writes: [srcb], note: "MOVD2B moves a DEST row back into SrcB" }
+      - { id: f4, label: "Math again",               reads: [srca, srcb], writes: [dest], expr: "DEST += A·B'" }
+      - { id: f5, label: "Load to SFPU",             reads: [dest],        writes: [sfpu] }
+      - { id: f6, label: "exp() on SFPU",            reads: [sfpu],        writes: [sfpu], expr: "LReg = exp(acc)" }
+      - { id: f7, label: "Store back to DEST",       reads: [sfpu],        writes: [dest], expr: "DEST = exp(A·B + A·B')" }
+      - { id: f8, label: "Pack to L1 (edge masks)",  reads: [dest],        writes: [l1_out], note: "PACR with edge masks set" }
+    blocks:
+      - { id: mexp_u, lane_id: trisc0, resource_id: unpack, label: "unpack A,B",  duration_clocks: 80 }
+      - { id: mexp_m, lane_id: trisc1, resource_id: fpu,    label: "macc",        duration_clocks: 48, dest_bank: 0 }
+      - { id: mexp_s, lane_id: trisc1, resource_id: sfpu,   label: "exp",         duration_clocks: 64, dest_bank: 0 }
+      - { id: mexp_p, lane_id: trisc2, resource_id: pack,   label: "pack",        duration_clocks: 64, dest_bank: 0 }
+
+  - id: cpy
+    name: "copy_tiles"        # no flow: → derived unpack→math→pack
+    kind: eltwise
+    tiles: 2
+    blocks:
+      - { id: cpy_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: cpy_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 1 }
+      - { id: cpy_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 1 }
