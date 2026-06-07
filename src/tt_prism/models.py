@@ -21,12 +21,34 @@ DependencyKind = Literal[
 ResourceKind = Literal["unpack", "fpu", "sfpu", "pack"]
 
 
+class Core(BaseModel):
+    """One Tensix core on the chip, addressed by grid coordinates (x, y). Each
+    core has its own TRISC lanes and its own UNPACK/FPU/SFPU/PACK engines and
+    DEST banks — so resource/lane/bank serialization is scoped per core."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    x: int = 0
+    y: int = 0
+    name: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return self.name or f"Core ({self.x},{self.y})"
+
+
 class Lane(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
     name: str
     order: int = 0
+    # Set by the flattener for multi-core diagrams: a group key (the core id) and
+    # a header label drawn above the first lane of each group. None for
+    # single-core / flat diagrams (no grouping chrome).
+    group: str | None = None
+    group_label: str = ""
 
 
 class Resource(BaseModel):
@@ -89,6 +111,7 @@ class Op(BaseModel):
     name: str = ""
     kind: str = ""           # free-form: "matmul", "reduce", ... (drives nothing yet)
     tiles: int = 1           # number of tiles operated on (metadata for now)
+    core_id: str | None = None  # which Core this op runs on (None → the single/default core)
     blocks: list[Block] = Field(default_factory=list)
 
     @property
@@ -119,6 +142,7 @@ class Diagram(BaseModel):
     clock_ghz: float | None = None
     grid_clocks: int = 8
     dest_banks: int = 2      # number of virtual DEST banks software splits DEST into
+    cores: list[Core] = Field(default_factory=list)   # Tensix cores; empty → single implicit core
     lanes: list[Lane] = Field(default_factory=list)
     resources: list[Resource] = Field(default_factory=list)
     work_items: list[WorkItem] = Field(default_factory=list)
@@ -143,6 +167,12 @@ class Diagram(BaseModel):
                 raise ValueError(
                     f"work item {w.id} references unknown resource {w.resource_id}"
                 )
+        # cores
+        core_ids: set[str] = set()
+        for c in self.cores:
+            if c.id in core_ids:
+                raise ValueError(f"duplicate core id: {c.id}")
+            core_ids.add(c.id)
         # ops + their blocks
         op_ids: set[str] = set()
         block_ids: set[str] = set()
@@ -150,6 +180,12 @@ class Diagram(BaseModel):
             if op.id in op_ids:
                 raise ValueError(f"duplicate op id: {op.id}")
             op_ids.add(op.id)
+            if op.core_id is not None and op.core_id not in core_ids:
+                raise ValueError(f"op {op.id} references unknown core {op.core_id}")
+            if op.core_id is None and len(self.cores) > 1:
+                raise ValueError(
+                    f"op {op.id} must set core_id (diagram declares {len(self.cores)} cores)"
+                )
             for b in op.blocks:
                 if b.id in block_ids or b.id in item_ids:
                     raise ValueError(f"duplicate block id: {b.id}")
@@ -193,6 +229,25 @@ class Diagram(BaseModel):
             if w.id == item_id:
                 return w
         raise KeyError(item_id)
+
+    def core_by_id(self, core_id: str) -> Core | None:
+        for c in self.cores:
+            if c.id == core_id:
+                return c
+        return None
+
+    def effective_cores(self) -> list[Core]:
+        """The cores to lay out: the declared cores, or a single implicit core
+        (id ``"__core__"``) for single-core / legacy diagrams."""
+        return self.cores or [Core(id="__core__", x=0, y=0, name="")]
+
+    def core_of_op(self, op: Op) -> Core:
+        """Resolve the core an op runs on, defaulting to the first effective core."""
+        if op.core_id is not None:
+            c = self.core_by_id(op.core_id)
+            if c is not None:
+                return c
+        return self.effective_cores()[0]
 
     def op_by_id(self, op_id: str) -> Op | None:
         for op in self.ops:

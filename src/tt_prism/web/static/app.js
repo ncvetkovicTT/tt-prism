@@ -189,8 +189,25 @@ function render() {
 
   // lanes
   const lanes = [...state.diagram.lanes].sort((a, b) => a.order - b.order);
+  let prevGroup = null;
   for (const lane of lanes) {
     const y = yLaneTop(lane.order);
+    // Per-core group header (multi-core diagrams) drawn in the blank gap row
+    // above each core's first lane, with a separator to decouple cores.
+    if (lane.group != null && lane.group !== prevGroup) {
+      if (prevGroup !== null) {
+        svg.appendChild(svgNs("line", {
+          x1: state.leftMargin, y1: y - 10,
+          x2: width - state.rightMargin, y2: y - 10,
+          stroke: "#b0b6bd", "stroke-width": 1.5,
+        }));
+      }
+      svg.appendChild(svgNs("text", {
+        x: state.leftMargin, y: y - 14,
+        "font-size": 12, "font-weight": 700, fill: "#3b4252",
+      }, lane.group_label || lane.group));
+      prevGroup = lane.group;
+    }
     svg.appendChild(svgNs("rect", {
       x: state.leftMargin, y,
       width: width - state.leftMargin - state.rightMargin,

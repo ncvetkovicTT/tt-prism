@@ -1,0 +1,69 @@
+# Multi-core (a slice of a Blackhole chip): two Tensix cores, each with its own
+# TRISC lanes and UNPACK/FPU/SFPU/PACK engines. Ops name the core they run on.
+# Engines/lanes/DEST banks serialize *per core*, so the two cores run in
+# parallel except where an explicit cross-core dependency (a NoC transfer,
+# modeled as l1_data with a gap) couples them.
+#
+#   tt-prism schedule examples/ops_multicore.yaml
+#   tt-prism serve    examples/ops_multicore.yaml
+
+title: "2 cores: independent matmuls + a cross-core (NoC) dependency"
+clock_ghz: 1.0
+grid_clocks: 32
+dest_banks: 2
+
+cores:
+  - { id: c00, x: 0, y: 0, name: "Core (0,0)" }
+  - { id: c10, x: 1, y: 0, name: "Core (1,0)" }
+
+# lane + resource templates — instantiated per core
+lanes:
+  - { id: trisc0, name: "TRISC 0", order: 0 }
+  - { id: trisc1, name: "TRISC 1", order: 1 }
+  - { id: trisc2, name: "TRISC 2", order: 2 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+ops:
+  # --- Core (0,0): two matmuls, alternating DEST banks so MATH overlaps PACK ---
+  - id: a0
+    name: "matmul A0"
+    core_id: c00
+    blocks:
+      - { id: a0_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: a0_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 0 }
+      - { id: a0_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+  - id: a1
+    name: "matmul A1"
+    core_id: c00
+    blocks:
+      - { id: a1_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: a1_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 1 }
+      - { id: a1_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 1 }
+
+  # --- Core (1,0): one independent matmul (runs in parallel with Core (0,0)) ---
+  - id: b0
+    name: "matmul B0"
+    core_id: c10
+    blocks:
+      - { id: b0_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: b0_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 0 }
+      - { id: b0_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+
+  # --- Core (1,0): a matmul that consumes A1's result over the NoC ---
+  - id: b1
+    name: "matmul B1 (needs A1)"
+    core_id: c10
+    blocks:
+      - { id: b1_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: b1_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 1 }
+      - { id: b1_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 1 }
+
+dependencies:
+  # Cross-core RAW over the NoC: B1 can't unpack until A1 has packed to L1,
+  # plus a NoC transfer latency.
+  - { from: a1, to: b1, kind: l1_data, min_gap_clocks: 40, label: "A1 → NoC → B1" }

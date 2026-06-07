@@ -8,9 +8,9 @@ in the [perf optimization tooling proposal](https://tenstorrent.atlassian.net/wi
 ## What it does
 
 - Lets you **author** a pipeline diagram (TRISC0/1/2 lanes + UNPACK/FPU/SFPU/PACK
-  resources) as a hand-editable YAML file — either as high-level **ops** (one
-  Compute API call each) whose timing the scheduler derives, or as hand-placed
-  **work items** with explicit start clocks.
+  resources, across one or many Tensix **cores**) as a hand-editable YAML file —
+  either as high-level **ops** (one Compute API call each) whose timing the
+  scheduler derives, or as hand-placed **work items** with explicit start clocks.
 - **Schedules** op-authored diagrams against Tensix constraints (intra-op
   unpack→math→pack handshake, singleton engines, virtual DEST double-buffering,
   cross-op data dependencies through L1) so the picture is always physically
@@ -276,6 +276,34 @@ tt-prism validate examples/ops_add_then_mul.yaml   # also checks schedulability
 
 This declarative form is intended to be easy to generate from a kernel — by a
 human or an AI — for zero-day understanding of what a compute kernel does.
+
+### Multiple cores (a whole Blackhole chip)
+
+Declare `cores` (each a Tensix core at grid coordinates `x, y`) and tag each op
+with the `core_id` it runs on. The `lanes`/`resources` lists act as a template
+that is instantiated per core: each core has its **own** TRISC lanes,
+UNPACK/FPU/SFPU/PACK engines, and DEST banks, so resource/lane/bank
+serialization is **scoped per core** — different cores run in parallel. Couple
+cores with an explicit dependency (a NoC transfer, modelled as `l1_data` with a
+`min_gap_clocks` latency).
+
+```yaml
+cores:
+  - { id: c00, x: 0, y: 0, name: "Core (0,0)" }
+  - { id: c10, x: 1, y: 0, name: "Core (1,0)" }
+
+ops:
+  - { id: a1, core_id: c00, name: "matmul A1", blocks: [ ... ] }
+  - { id: b1, core_id: c10, name: "matmul B1", blocks: [ ... ] }
+
+dependencies:
+  - { from: a1, to: b1, kind: l1_data, min_gap_clocks: 40 }   # A1 → NoC → B1
+```
+
+The Gantt view renders each core as its own group of lanes, separated by a gap
+and a core header, so cores are visually decoupled. See
+[`examples/ops_multicore.yaml`](examples/ops_multicore.yaml). Single-core
+diagrams (no `cores` declared) render exactly as before.
 
 ## Architecture
 

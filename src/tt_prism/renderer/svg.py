@@ -146,8 +146,23 @@ def _grid(
 
 
 def _lane_rows(diagram: Diagram, layout: Layout, width: int) -> Iterable[str]:
+    prev_group: str | None = None
     for lane in sorted(diagram.lanes, key=lambda l: l.order):
         y = layout.y_lane_top(lane.order)
+        # Per-core group header drawn in the blank gap row above each core's
+        # first lane, with a separator line to visually decouple cores.
+        if lane.group is not None and lane.group != prev_group:
+            if prev_group is not None:
+                yield (
+                    f'<line x1="{layout.left_margin}" y1="{y - 10}" '
+                    f'x2="{width - layout.right_margin}" y2="{y - 10}" '
+                    f'stroke="#b0b6bd" stroke-width="1.5"/>'
+                )
+            yield (
+                f'<text x="{layout.left_margin}" y="{y - 14}" font-size="12" '
+                f'font-weight="700" fill="#3b4252">{escape(lane.group_label)}</text>'
+            )
+            prev_group = lane.group
         yield (
             f'<rect x="{layout.left_margin}" y="{y}" '
             f'width="{width - layout.left_margin - layout.right_margin}" '

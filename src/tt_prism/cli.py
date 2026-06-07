@@ -137,14 +137,17 @@ def schedule(
         console.print(f"[red]unschedulable[/red]:\n{e}")
         raise typer.Exit(code=1)
 
+    multi = len(d.cores) > 1
+    cols = (["core"] if multi else []) + ["op", "block", "lane", "resource", "start", "dur", "end"]
     table = Table(title=str(path))
-    for col in ("op", "block", "lane", "resource", "start", "dur", "end"):
+    for col in cols:
         table.add_column(col)
     for b in sched.blocks:
-        table.add_row(
+        row = ([b.core_id] if multi else []) + [
             b.op_id, b.block_id, b.lane_id, b.resource_id,
             str(b.start_clock), str(b.duration_clocks), str(b.end_clock),
-        )
+        ]
+        table.add_row(*row)
     console.print(table)
     console.print(f"[cyan]total[/cyan] = {sched.total_clocks()} clk")
 

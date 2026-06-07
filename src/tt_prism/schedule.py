@@ -37,6 +37,7 @@ from tt_prism.models import Block, Diagram, Op
 class ScheduledBlock:
     block_id: str
     op_id: str
+    core_id: str
     lane_id: str
     resource_id: str
     label: str
@@ -108,6 +109,9 @@ def _resolve_endpoint(diagram: Diagram, ref: str, *, as_source: bool) -> str | N
 
 def build_edges(diagram: Diagram) -> list[Edge]:
     seq = _program_order(diagram)
+    # Each engine / lane / DEST bank is physical *per core*, so serialization is
+    # scoped by core: UNPACK on core (0,0) is independent of UNPACK on core (1,0).
+    core_of = {b.id: diagram.core_of_op(op).id for op in diagram.ops for b in op.blocks}
     edges: list[Edge] = []
 
     # intra-op precedence: consecutive blocks of each op
@@ -115,16 +119,16 @@ def build_edges(diagram: Diagram) -> list[Edge]:
         for prev, nxt in zip(op.blocks, op.blocks[1:]):
             edges.append(Edge(prev.id, nxt.id, gap=0, reason="intra_op"))
 
-    # resource + lane + dest-bank serialization: chain same-key blocks in program
-    # order. dest_bank skips blocks that don't touch DEST (dest_bank is None).
+    # resource + lane + dest-bank serialization: chain blocks sharing
+    # (core, key) in program order. dest_bank skips blocks not touching DEST.
     def _serialize(key: str, reason: str, skip_none: bool = False) -> None:
-        groups: dict[object, list[str]] = defaultdict(list)
+        groups: dict[tuple[str, object], list[str]] = defaultdict(list)
         for op in diagram.ops:
             for b in op.blocks:
                 v = getattr(b, key)
                 if skip_none and v is None:
                     continue
-                groups[v].append(b.id)
+                groups[(core_of[b.id], v)].append(b.id)
         for ids in groups.values():
             ids.sort(key=lambda bid: seq[bid])
             for a, b in zip(ids, ids[1:]):
@@ -190,6 +194,7 @@ def solve(diagram: Diagram) -> Schedule:
         ScheduledBlock(
             block_id=b.id,
             op_id=op.id,
+            core_id=diagram.core_of_op(op).id,
             lane_id=b.lane_id,
             resource_id=b.resource_id,
             label=b.label or f"{op.name or op.id} · {b.resource_id}",
@@ -207,7 +212,7 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
     start clocks, so the existing SVG renderer can draw it. Intra-op and explicit
     cross-op edges are emitted as dependency arrows; serialization edges are not
     (they would clutter the picture)."""
-    from tt_prism.models import Dependency, WorkItem
+    from tt_prism.models import Dependency, Lane, WorkItem
 
     sched = solve(diagram)
     bank_of = {b.id: b.dest_bank for op in diagram.ops for b in op.blocks}
@@ -217,10 +222,39 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
         bank_tags = [f"dest{bank}"] if bank is not None else []   # bank 0 -> "dest0"
         return [b.op_id, *bank_tags, *b.tags]
 
+    # Multi-core: replicate the lane template per core into distinct rows, with a
+    # one-slot `order` gap between cores (the renderer leaves that row blank → a
+    # visual break) and a per-core group header. Single-core diagrams keep the
+    # original lanes/ids unchanged.
+    cores = diagram.effective_cores()
+    multi = len(cores) > 1
+    template = sorted(diagram.lanes, key=lambda l: l.order)
+
+    if multi:
+        lanes: list[Lane] = []
+        stride = len(template) + 1            # one blank gap row per core
+        for i, core in enumerate(cores):
+            for j, t in enumerate(template):
+                lanes.append(Lane(
+                    id=f"{core.id}::{t.id}",
+                    name=t.name,
+                    order=i * stride + 1 + j,  # +1 leaves a gap row above each core for its header
+                    group=core.id,
+                    group_label=core.display_name,
+                ))
+
+        def lane_id_for(b: ScheduledBlock) -> str:
+            return f"{b.core_id}::{b.lane_id}"
+    else:
+        lanes = list(diagram.lanes)
+
+        def lane_id_for(b: ScheduledBlock) -> str:
+            return b.lane_id
+
     work_items = [
         WorkItem(
             id=b.block_id,
-            lane_id=b.lane_id,
+            lane_id=lane_id_for(b),
             resource_id=b.resource_id,
             label=b.label,
             start_clock=b.start_clock,
@@ -232,7 +266,7 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
 
     deps: list[Dependency] = []
     for e in sched.edges:
-        if e.reason in ("resource", "lane"):
+        if e.reason in ("resource", "lane", "dest_bank"):
             continue
         kind = "dep" if e.reason == "intra_op" else e.reason
         if kind not in ("fifo", "dep", "flow", "src_valid", "dst_valid", "l1_data", "issue_order"):
@@ -243,7 +277,7 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
         title=diagram.title,
         clock_ghz=diagram.clock_ghz,
         grid_clocks=diagram.grid_clocks,
-        lanes=list(diagram.lanes),
+        lanes=lanes,
         resources=list(diagram.resources),
         work_items=work_items,
         dependencies=deps,
