@@ -89,17 +89,64 @@ def new(
 def validate(
     path: Path = typer.Argument(..., exists=True, readable=True, help="Diagram YAML"),
 ) -> None:
-    """Validate a diagram file."""
+    """Validate a diagram file (and, for op-authored diagrams, that the
+    constraints are schedulable)."""
     try:
         d = storage.load(path)
     except Exception as e:
         console.print(f"[red]invalid[/red] {path}:\n{e}")
         raise typer.Exit(code=1)
+    if d.ops:
+        from tt_prism.schedule import ScheduleError, solve
+
+        try:
+            sched = solve(d)
+        except ScheduleError as e:
+            console.print(f"[red]unschedulable[/red] {path}:\n{e}")
+            raise typer.Exit(code=1)
+        blocks = sum(len(op.blocks) for op in d.ops)
+        console.print(
+            f"[green]ok[/green] {path}  "
+            f"lanes={len(d.lanes)} ops={len(d.ops)} blocks={blocks} "
+            f"deps={len(d.dependencies)} total={sched.total_clocks()} clk"
+        )
+        return
     console.print(
         f"[green]ok[/green] {path}  "
         f"lanes={len(d.lanes)} items={len(d.work_items)} "
         f"deps={len(d.dependencies)} total={d.total_clocks()} clk"
     )
+
+
+@app.command()
+def schedule(
+    path: Path = typer.Argument(..., exists=True, readable=True, help="Op-authored YAML"),
+) -> None:
+    """Solve an op-authored diagram and print the resolved timeline."""
+    from rich.table import Table
+
+    from tt_prism.schedule import ScheduleError, solve
+
+    d = storage.load(path)
+    if not d.ops:
+        console.print(f"[yellow]no ops[/yellow] in {path} (this is a flat work-item diagram)")
+        raise typer.Exit(code=1)
+    try:
+        sched = solve(d)
+    except ScheduleError as e:
+        console.print(f"[red]unschedulable[/red]:\n{e}")
+        raise typer.Exit(code=1)
+
+    table = Table(title=str(path))
+    for col in ("op", "block", "lane", "resource", "start", "dur", "end"):
+        table.add_column(col)
+    for b in sched.blocks:
+        table.add_row(
+            b.op_id, b.block_id, b.lane_id, b.resource_id,
+            str(b.start_clock), str(b.duration_clocks), str(b.end_clock),
+        )
+    console.print(table)
+    console.print(f"[cyan]total[/cyan] = {sched.total_clocks()} clk")
 
 
 @app.command()
@@ -113,6 +160,10 @@ def render(
 ) -> None:
     """Render a diagram to SVG (or PDF if output ends in .pdf)."""
     d = storage.load(path)
+    if d.ops:
+        from tt_prism.schedule import to_render_diagram
+
+        d = to_render_diagram(d)
     opts = RenderOptions(px_per_clock=px_per_clock, lane_height=lane_height)
     if output.suffix.lower() == ".pdf":
         from tt_prism.renderer.pdf import render_pdf

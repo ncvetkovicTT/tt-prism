@@ -1,0 +1,51 @@
+# Op-authored kernel (scheduler-driven): c = a + b ; e = d * c
+#
+# This is the declarative interface meant to be easy for a human or an AI to
+# fill in from a compute kernel. You describe ops (one Compute API call each),
+# which resource each block maps to, how long each block takes, and what comes
+# before what. tt-prism *derives* every start_clock so the picture is always a
+# legal Tensix schedule — there are no start_clock fields here on purpose.
+#
+# Run:  tt-prism schedule examples/ops_add_then_mul.yaml
+#       tt-prism render   examples/ops_add_then_mul.yaml -o add_then_mul.svg
+
+title: "c = a + b ; e = d * c"
+clock_ghz: 1.0
+grid_clocks: 32
+
+lanes:
+  - { id: trisc0, name: "TRISC 0", order: 0 }   # dispatches UNPACK
+  - { id: trisc1, name: "TRISC 1", order: 1 }   # dispatches FPU / SFPU
+  - { id: trisc2, name: "TRISC 2", order: 2 }   # dispatches PACK
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+ops:
+  # c = a + b
+  - id: add
+    name: "add_tiles"
+    kind: eltwise
+    tiles: 8
+    blocks:
+      - { id: add_unp, lane_id: trisc0, resource_id: unpack, label: "unpack a,b", duration_clocks: 104 }
+      - { id: add_fpu, lane_id: trisc1, resource_id: fpu,    label: "c = a + b",   duration_clocks: 32 }
+      - { id: add_pak, lane_id: trisc2, resource_id: pack,   label: "pack c -> L1", duration_clocks: 64 }
+
+  # e = d * c   (needs c in L1 before it can unpack c)
+  - id: mul
+    name: "mul_tiles"
+    kind: eltwise
+    tiles: 8
+    blocks:
+      - { id: mul_unp, lane_id: trisc0, resource_id: unpack, label: "unpack d,c", duration_clocks: 104 }
+      - { id: mul_fpu, lane_id: trisc1, resource_id: fpu,    label: "e = d * c",   duration_clocks: 32 }
+      - { id: mul_pak, lane_id: trisc2, resource_id: pack,   label: "pack e -> L1", duration_clocks: 64 }
+
+dependencies:
+  # Cross-op RAW through L1: mul cannot start unpacking until add has packed c.
+  # Referencing op ids resolves to add's last block (pack) -> mul's first block (unpack).
+  - { from: add, to: mul, kind: l1_data, label: "c via L1" }

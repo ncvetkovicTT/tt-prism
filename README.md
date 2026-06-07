@@ -151,6 +151,59 @@ On load, the YAML is validated for:
 Invalid files fail with a clear error from `tt-prism validate` and a 400 from
 the editor's PUT endpoint.
 
+## Op-authored diagrams (constraint scheduler)
+
+Authoring absolute `start_clock`s by hand lets you draw physically impossible
+pictures (unpack after math; resize one bar without shifting its dependents). A
+diagram can instead be authored as **ops**, in which case start clocks are
+*derived* by a scheduler so the picture is always a legal Tensix schedule.
+
+An **Op** is one Compute API call (`mm_init`, `reduce_tile`,
+`pack_untilize_dest`, …) — the smallest unit tt-prism models. Each op lists
+**blocks** in pipeline order; a block holds one of the four resources
+(UNPACK/FPU/SFPU/PACK) for a user-supplied duration, dispatched by one TRISC
+lane. THCON / sync time is folded into whichever block wraps it.
+
+```yaml
+ops:
+  - id: add
+    name: "add_tiles"          # the Compute API call
+    kind: eltwise
+    tiles: 8                   # metadata for now
+    blocks:                    # pipeline order => unpack -> fpu -> pack
+      - { id: add_unp, lane_id: trisc0, resource_id: unpack, duration_clocks: 104 }
+      - { id: add_fpu, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32 }
+      - { id: add_pak, lane_id: trisc2, resource_id: pack,   duration_clocks: 64 }
+
+dependencies:
+  # cross-op RAW through L1; an op id resolves to its pack (source) / unpack (target)
+  - { from: add, to: mul, kind: l1_data, min_gap_clocks: 0 }
+```
+
+The scheduler (`schedule.py`) computes each block's start as the longest path
+(ASAP) over four kinds of precedence edge:
+
+- **intra-op** — consecutive blocks of an op (the unpack→math→pack handshake).
+- **resource serialization** — a resource is a singleton; same-resource blocks
+  can't overlap.
+- **lane serialization** — a TRISC dispatches in order; same-lane blocks can't
+  overlap.
+- **explicit dependencies** — e.g. `l1_data` (`c = a + b` then `e = d * c`:
+  can't unpack `c` until it's packed to L1). `min_gap_clocks` adds sync latency.
+
+Because placement is derived, *moving or resizing any block reflows everything
+downstream automatically*. New semantic dependency `kind`s — `src_valid`,
+`dst_valid`, `l1_data`, `issue_order` — join the cosmetic `dep`/`fifo`/`flow`.
+
+```bash
+tt-prism schedule examples/ops_add_then_mul.yaml   # print resolved timeline
+tt-prism render   examples/ops_add_then_mul.yaml -o out.svg   # flatten + render
+tt-prism validate examples/ops_add_then_mul.yaml   # also checks schedulability
+```
+
+This declarative form is intended to be easy to generate from a kernel — by a
+human or an AI — for zero-day understanding of what a compute kernel does.
+
 ## Architecture
 
 ```
