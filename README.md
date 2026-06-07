@@ -31,10 +31,21 @@ Requires Python 3.10+.
 ```bash
 git clone <repo-url> tt-prism
 cd tt-prism
-pip install -e .
-# optional: PDF export needs cairosvg
-pip install -e '.[pdf]'
+python -m venv .venv && source .venv/bin/activate   # recommended
+pip install -e .                                    # installs all runtime deps
 ```
+
+This installs everything needed to author, schedule, serve, and render to SVG
+**and PDF**. PDF rendering additionally needs the native **Cairo** library on the
+system (the `cairosvg` Python package is installed for you, but it loads
+`libcairo2` at render time):
+
+```bash
+# Debian/Ubuntu, if PDF export complains about the Cairo library:
+sudo apt-get install libcairo2
+```
+
+For development (tests + linter): `pip install -e '.[dev]'`.
 
 After install, the `tt-prism` console command is available. If it isn't on your
 PATH, run `python -m tt_prism.cli ...` instead.
@@ -67,7 +78,7 @@ tt-prism schedule examples/ops_dest_banks.yaml
 
 # 4. render — to SVG (default) or PDF; op-diagrams are scheduled first
 tt-prism render examples/ops_dest_banks.yaml -o out.svg
-tt-prism render examples/ops_dest_banks.yaml -o out.pdf      # needs the [pdf] extra
+tt-prism render examples/ops_dest_banks.yaml -o out.pdf      # PDF also needs libcairo2
 
 # edit loop: tweak a duration / dest_bank in the YAML, re-run schedule/render to
 # see everything downstream reflow.

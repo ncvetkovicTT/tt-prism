@@ -15,10 +15,12 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "jinja2>=3.1",
+    # PDF export. The Python package installs anywhere; rendering a PDF also
+    # needs the native Cairo library (libcairo2) present on the system.
+    "cairosvg>=2.7",
 ]
 
 [project.optional-dependencies]
-pdf = ["cairosvg>=2.7"]
 dev = ["pytest>=8", "ruff>=0.4"]
 
 [project.scripts]
