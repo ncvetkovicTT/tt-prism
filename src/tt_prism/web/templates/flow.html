@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>tt-prism — flow view</title>
+<title>tt-prism — flow walkthrough</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
 <link rel="stylesheet" href="/static/styles.css"/>
 </head>
@@ -10,50 +10,33 @@
 <header>
   <div class="title">
     <strong>tt-prism</strong>
-    <span class="path">flow view · {{ diagram_path }}</span>
+    <span class="path">flow walkthrough · {{ diagram_path }}</span>
   </div>
   <div class="toolbar">
     <a class="linkbtn" href="/">← Editor (Gantt)</a>
     <span class="sep"></span>
-    <span class="modeswitch">
-      <button id="mode-op" class="mode active" title="Single-op dataflow">Single op</button><button id="mode-chip" class="mode" title="Whole-chip / multi-core">Chip</button>
-    </span>
-    <span class="sep"></span>
     <button id="prev" title="Previous step">◀ Prev</button>
     <button id="play" class="primary" title="Play / pause">▶ Play</button>
     <button id="next" title="Next step">Next ▶</button>
-    <button id="reset" title="Back to first step">Reset</button>
+    <button id="reset" title="Back to the start">Reset</button>
     <span id="step-info" class="status"></span>
   </div>
 </header>
-<main class="flow-main">
+<main class="walk-main">
   <aside class="flow-ops">
-    <h3>Ops</h3>
+    <h3>Ops (in order)</h3>
     <div id="op-list" class="op-list muted">Loading…</div>
   </aside>
 
-  <section class="flow-center">
+  <section class="walk-center">
+    <!-- the chip grid is always shown (1+ cores from the YAML) -->
+    <div id="chip-grid" class="chip-grid"></div>
+    <!-- the Tensix engine view for the current compute op -->
     <div id="op-title" class="flow-op-title"></div>
     <div id="diagram" class="flow-diagram"></div>
     <div id="step-caption" class="flow-caption muted"></div>
   </section>
-
-  <aside class="flow-steps">
-    <h3>Steps</h3>
-    <ol id="step-list" class="step-list muted">—</ol>
-  </aside>
 </main>
-
-<section id="chip-main" class="chip-main" hidden>
-  <div class="chip-center">
-    <div id="chip-grid" class="chip-grid"></div>
-    <div id="chip-caption" class="flow-caption muted"></div>
-  </div>
-  <aside class="flow-steps">
-    <h3>NoC interactions</h3>
-    <ol id="noc-list" class="step-list muted">—</ol>
-  </aside>
-</section>
 <script src="/static/flow.js" type="module"></script>
 </body>
 </html>
