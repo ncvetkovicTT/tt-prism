@@ -40,18 +40,23 @@ ops:
     name: "sdpa_chunk[0] (first)"
     kind: flash_attention_chunk
     tiles: 4
-    # `data:` names the datum each step moves so the flow view draws one labeled
-    # token per datum (K,Q,V in Src; scores S, max m, probs P, output O in DEST).
+    # FACE-LEVEL dataflow: each operand tile is two face-pairs (F0/1 = top half,
+    # F2/3 = bottom half, each an 8x32 = 16x16 face). `data:` labels each face
+    # token so you see faces enter Src and get consumed into the DEST result.
     flow:
-      - { id: s1, label: "Unpack K → SrcA",   data: "K", reads: [l1_in],      writes: [srca], note: "cb_k → SrcA (transpose_k)" }
-      - { id: s2, label: "Unpack Q → SrcB",   data: "Q", reads: [l1_in],      writes: [srcb], note: "cb_q → SrcB" }
-      - { id: s3, label: "QK^T matmul (FPU)", data: "S", reads: [srca, srcb], writes: [dest], expr: "dest[mm1] = Q @ K^T (scores)" }
-      - { id: s4, label: "Reduce-max (SFPU)", data: "m", reads: [dest],       writes: [dest], expr: "dest[max] = rowmax(S)" }
-      - { id: s5, label: "Bcast-sub (FPU)",   data: "S", reads: [dest],       writes: [srca, srcb, dest], expr: "dest[mm1] = S - bcast(m)" }
-      - { id: s6, label: "Exp scores (SFPU)", data: "P", reads: [dest],       writes: [dest], expr: "dest[mm1] = exp(S)  (per-tile, FPU<->SFPU sem)" }
-      - { id: s7, label: "Unpack V → SrcA",   data: "V", reads: [l1_in],      writes: [srca] }
-      - { id: s8, label: "PV matmul (FPU)",   data: "O", reads: [srca, dest], writes: [dest], expr: "dest[mm2] += P(via MOVD2B) @ V" }
-      - { id: s9, label: "Reduce-sum (SFPU)", data: "l", reads: [dest],       writes: [dest], expr: "dest[sum] = rowsum(P)" }
+      - { id: s1, label: "Unpack K F0/1 → SrcA", data: "K.01", reads: [l1_in],      writes: [srca], note: "cb_k face0/1 → SrcA (transpose_k)" }
+      - { id: s2, label: "Unpack K F2/3 → SrcA", data: "K.23", reads: [l1_in],      writes: [srca] }
+      - { id: s3, label: "Unpack Q F0/1 → SrcB", data: "Q.01", reads: [l1_in],      writes: [srcb] }
+      - { id: s4, label: "Unpack Q F2/3 → SrcB", data: "Q.23", reads: [l1_in],      writes: [srcb] }
+      - { id: s5, label: "QK^T matmul (FPU)",    data: "S",    reads: [srca, srcb], writes: [dest], expr: "dest[mm1] = Q @ K^T (scores)" }
+      - { id: s6, label: "Reduce-max (SFPU)",    data: "m",    reads: [dest],       writes: [dest], expr: "dest[max] = rowmax(S)" }
+      - { id: s7, label: "Bcast-sub (FPU)",      data: "S",    reads: [dest],       writes: [srca, srcb, dest], expr: "dest[mm1] = S - bcast(m)" }
+      - { id: s8, label: "Exp F0/1 (SFPU)",      data: "P.01", reads: [dest],       writes: [dest], expr: "exp(S) face0/1 (8x32, FPU<->SFPU sem)" }
+      - { id: s9, label: "Exp F2/3 (SFPU)",      data: "P.23", reads: [dest],       writes: [dest], expr: "exp(S) face2/3" }
+      - { id: s10, label: "Unpack V F0/1 → SrcA", data: "V.01", reads: [l1_in],     writes: [srca] }
+      - { id: s11, label: "Unpack V F2/3 → SrcA", data: "V.23", reads: [l1_in],     writes: [srca] }
+      - { id: s12, label: "PV matmul (FPU)",     data: "O",    reads: [srca, dest], writes: [dest], expr: "dest[mm2] += P(via MOVD2B) @ V" }
+      - { id: s13, label: "Reduce-sum (SFPU)",   data: "l",    reads: [dest],       writes: [dest], expr: "dest[sum] = rowsum(P)" }
     blocks:
       - { id: c0_qku, lane_id: trisc0, resource_id: unpack, label: "unpack Q,K", duration_clocks: 12, dest_bank: 0 }
       - { id: c0_qk,  lane_id: trisc1, resource_id: fpu,    label: "QK^T",       duration_clocks: 52, dest_bank: 0 }

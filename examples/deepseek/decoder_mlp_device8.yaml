@@ -123,7 +123,71 @@ ops:
   tiles: 4
   core_id: c0
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c0_attn_unpack
     lane_id: trisc0
@@ -154,13 +218,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -170,7 +260,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -179,17 +269,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -198,7 +315,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -207,16 +324,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -254,7 +380,71 @@ ops:
   tiles: 4
   core_id: c0
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c0_mlp_unpack
     lane_id: trisc0
@@ -334,7 +524,71 @@ ops:
   tiles: 4
   core_id: c1
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c1_attn_unpack
     lane_id: trisc0
@@ -365,13 +619,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -381,7 +661,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -390,17 +670,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -409,7 +716,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -418,16 +725,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -465,7 +781,71 @@ ops:
   tiles: 4
   core_id: c1
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c1_mlp_unpack
     lane_id: trisc0
@@ -516,7 +896,71 @@ ops:
   tiles: 4
   core_id: c2
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c2_attn_unpack
     lane_id: trisc0
@@ -547,13 +991,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -563,7 +1033,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -572,17 +1042,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -591,7 +1088,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -600,16 +1097,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -647,7 +1153,71 @@ ops:
   tiles: 4
   core_id: c2
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c2_mlp_unpack
     lane_id: trisc0
@@ -698,7 +1268,71 @@ ops:
   tiles: 4
   core_id: c3
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c3_attn_unpack
     lane_id: trisc0
@@ -729,13 +1363,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -745,7 +1405,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -754,17 +1414,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -773,7 +1460,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -782,16 +1469,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -829,7 +1525,71 @@ ops:
   tiles: 4
   core_id: c3
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c3_mlp_unpack
     lane_id: trisc0
@@ -880,7 +1640,71 @@ ops:
   tiles: 4
   core_id: c4
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c4_attn_unpack
     lane_id: trisc0
@@ -911,13 +1735,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -927,7 +1777,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -936,17 +1786,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -955,7 +1832,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -964,16 +1841,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -1011,7 +1897,71 @@ ops:
   tiles: 4
   core_id: c4
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c4_mlp_unpack
     lane_id: trisc0
@@ -1062,7 +2012,71 @@ ops:
   tiles: 4
   core_id: c5
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c5_attn_unpack
     lane_id: trisc0
@@ -1093,13 +2107,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -1109,7 +2149,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -1118,17 +2158,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -1137,7 +2204,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -1146,16 +2213,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -1193,7 +2269,71 @@ ops:
   tiles: 4
   core_id: c5
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c5_mlp_unpack
     lane_id: trisc0
@@ -1244,7 +2384,71 @@ ops:
   tiles: 4
   core_id: c6
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c6_attn_unpack
     lane_id: trisc0
@@ -1275,13 +2479,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -1291,7 +2521,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -1300,17 +2530,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -1319,7 +2576,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -1328,16 +2585,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -1375,7 +2641,71 @@ ops:
   tiles: 4
   core_id: c6
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c6_mlp_unpack
     lane_id: trisc0
@@ -1426,7 +2756,71 @@ ops:
   tiles: 4
   core_id: c7
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c7_attn_unpack
     lane_id: trisc0
@@ -1457,13 +2851,39 @@ ops:
   category: null
   flow:
   - id: ''
-    label: unpack Q,K
+    label: unpack K F0/1
     reads:
     - l1_in
     writes:
     - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
     - srcb
-    data: ''
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
     expr: ''
     note: ''
   - id: ''
@@ -1473,7 +2893,7 @@ ops:
     - srcb
     writes:
     - dest
-    data: ''
+    data: S
     expr: scores = Q@K^T
     note: ''
   - id: ''
@@ -1482,17 +2902,44 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: m
     expr: running max
     note: ''
   - id: ''
-    label: exp / correction
+    label: exp F0/1 (SFPU)
     reads:
     - dest
     writes:
     - dest
-    data: ''
+    data: P.01
     expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
     note: ''
   - id: ''
     label: PV matmul (FPU)
@@ -1501,7 +2948,7 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: O
     expr: out += P@V
     note: ''
   - id: ''
@@ -1510,16 +2957,25 @@ ops:
     - dest
     writes:
     - dest
-    data: ''
+    data: l
     expr: normalize
     note: ''
   - id: ''
-    label: pack out
+    label: pack out F0/1
     reads:
     - dest
     writes:
     - l1_out
-    data: ''
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
     expr: ''
     note: ''
   blocks:
@@ -1557,7 +3013,71 @@ ops:
   tiles: 4
   core_id: c7
   category: null
-  flow: []
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
   blocks:
   - id: c7_mlp_unpack
     lane_id: trisc0

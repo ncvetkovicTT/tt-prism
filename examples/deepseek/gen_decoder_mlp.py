@@ -32,14 +32,35 @@ def cid(row, col):       return f"dev{dev(row,col)}"
 
 # Per-chip op pipeline: (suffix, name, kind, [(resource, lane, duration)], optional flow)
 #   lanes: trisc0=UNPACK, trisc1=FPU, trisc2=SFPU+PACK
+# FACE-LEVEL flows: each operand tile is two face-pairs (F0/1 top, F2/3 bottom)
+# so the flow view shows faces entering Src and being consumed into DEST.
 SDPA_FLOW = [
-    FlowStep(label="unpack Q,K",        reads=["l1_in"], writes=["srca", "srcb"]),
-    FlowStep(label="QK^T matmul (FPU)", reads=["srca", "srcb"], writes=["dest"], expr="scores = Q@K^T"),
-    FlowStep(label="reduce-max (SFPU)", reads=["dest"], writes=["dest"], expr="running max"),
-    FlowStep(label="exp / correction",  reads=["dest"], writes=["dest"], expr="online softmax"),
-    FlowStep(label="PV matmul (FPU)",   reads=["srca", "dest"], writes=["dest"], expr="out += P@V"),
-    FlowStep(label="reduce-sum + recip",reads=["dest"], writes=["dest"], expr="normalize"),
-    FlowStep(label="pack out",          reads=["dest"], writes=["l1_out"]),
+    FlowStep(label="unpack K F0/1", data="K.01", reads=["l1_in"], writes=["srca"]),
+    FlowStep(label="unpack K F2/3", data="K.23", reads=["l1_in"], writes=["srca"]),
+    FlowStep(label="unpack Q F0/1", data="Q.01", reads=["l1_in"], writes=["srcb"]),
+    FlowStep(label="unpack Q F2/3", data="Q.23", reads=["l1_in"], writes=["srcb"]),
+    FlowStep(label="QK^T matmul (FPU)", data="S", reads=["srca", "srcb"], writes=["dest"], expr="scores = Q@K^T"),
+    FlowStep(label="reduce-max (SFPU)", data="m", reads=["dest"], writes=["dest"], expr="running max"),
+    FlowStep(label="exp F0/1 (SFPU)",   data="P.01", reads=["dest"], writes=["dest"], expr="online softmax"),
+    FlowStep(label="exp F2/3 (SFPU)",   data="P.23", reads=["dest"], writes=["dest"]),
+    FlowStep(label="unpack V F0/1", data="V.01", reads=["l1_in"], writes=["srca"]),
+    FlowStep(label="unpack V F2/3", data="V.23", reads=["l1_in"], writes=["srca"]),
+    FlowStep(label="PV matmul (FPU)",   data="O", reads=["srca", "dest"], writes=["dest"], expr="out += P@V"),
+    FlowStep(label="reduce-sum + recip", data="l", reads=["dest"], writes=["dest"], expr="normalize"),
+    FlowStep(label="pack out F0/1", data="out.01", reads=["dest"], writes=["l1_out"]),
+    FlowStep(label="pack out F2/3", data="out.23", reads=["dest"], writes=["l1_out"]),
+]
+
+# Generic face-level matmul flow (activation × weight → output), reused by the
+# matmul-kind ops so the whole decoder shows face-level data movement.
+MATMUL_FACE_FLOW = [
+    FlowStep(label="unpack act F0/1", data="A.01", reads=["l1_in"], writes=["srca"]),
+    FlowStep(label="unpack act F2/3", data="A.23", reads=["l1_in"], writes=["srca"]),
+    FlowStep(label="unpack wt F0/1",  data="W.01", reads=["l1_in"], writes=["srcb"]),
+    FlowStep(label="unpack wt F2/3",  data="W.23", reads=["l1_in"], writes=["srcb"]),
+    FlowStep(label="matmul (FPU)",    data="acc",  reads=["srca", "srcb"], writes=["dest"], expr="acc += A·W"),
+    FlowStep(label="pack out F0/1",   data="O.01", reads=["dest"], writes=["l1_out"]),
+    FlowStep(label="pack out F2/3",   data="O.23", reads=["dest"], writes=["l1_out"]),
 ]
 
 def pipeline(chip):
@@ -54,17 +75,17 @@ def pipeline(chip):
         op("init",   "decoder_init",       "init",    [(F, "trisc1", 16)]),
         # ---- Phase A: MLA attention (fused_ops/attention_block) ----
         op("rmsn1",  "rmsnorm_in",          "rmsnorm", [(U,"trisc0",8),(F,"trisc1",30),(S,"trisc2",20),(P,"trisc2",12)]),
-        op("qproj",  "q_proj (matmul)",     "matmul",  [(U,"trisc0",10),(F,"trisc1",220),(P,"trisc2",20)]),
-        op("kvproj", "kv_a/b_proj (matmul)","matmul",  [(U,"trisc0",8),(F,"trisc1",120),(P,"trisc2",16)]),
+        op("qproj",  "q_proj (matmul)",     "matmul",  [(U,"trisc0",10),(F,"trisc1",220),(P,"trisc2",20)], flow=MATMUL_FACE_FLOW),
+        op("kvproj", "kv_a/b_proj (matmul)","matmul",  [(U,"trisc0",8),(F,"trisc1",120),(P,"trisc2",16)], flow=MATMUL_FACE_FLOW),
         op("rope",   "rope + kv_cache",     "rope",    [(U,"trisc0",8),(F,"trisc1",24),(S,"trisc2",40),(P,"trisc2",20)]),
         op("sdpa",   "flash_mla SDPA",      "flash_attention",
            [(U,"trisc0",40),(F,"trisc1",300),(S,"trisc2",120),(P,"trisc2",30)], flow=SDPA_FLOW),
         op("sdpar",  "sdpa_reduce_to_all",  "reduce",  [(F,"trisc1",30),(P,"trisc2",16)]),
-        op("oproj",  "post_sdpa kv_b2+o_proj","matmul",[(U,"trisc0",10),(F,"trisc1",260),(P,"trisc2",24)]),
+        op("oproj",  "post_sdpa kv_b2+o_proj","matmul",[(U,"trisc0",10),(F,"trisc1",260),(P,"trisc2",24)], flow=MATMUL_FACE_FLOW),
         # ---- Phase B: dense MLP (fused_ops/moe, routing disabled) ----
         op("rmsn2",  "rmsnorm_mlp",         "rmsnorm", [(U,"trisc0",8),(F,"trisc1",30),(S,"trisc2",20),(P,"trisc2",12)]),
-        op("gateup", "gate_up_proj + silu", "matmul",  [(U,"trisc0",16),(F,"trisc1",280),(S,"trisc2",40),(P,"trisc2",24)]),
-        op("down",   "down_proj + shared_expert","matmul",[(U,"trisc0",16),(F,"trisc1",260),(S,"trisc2",30),(P,"trisc2",28)]),
+        op("gateup", "gate_up_proj + silu", "matmul",  [(U,"trisc0",16),(F,"trisc1",280),(S,"trisc2",40),(P,"trisc2",24)], flow=MATMUL_FACE_FLOW),
+        op("down",   "down_proj + shared_expert","matmul",[(U,"trisc0",16),(F,"trisc1",260),(S,"trisc2",30),(P,"trisc2",28)], flow=MATMUL_FACE_FLOW),
         op("comb",   "combine + reduce_to_one","eltwise",[(U,"trisc0",8),(F,"trisc1",40),(P,"trisc2",16)]),
     ]
 
@@ -161,12 +182,12 @@ for i in range(NCORES):
         seq.append(dop("rmsn", "rmsnorm_in (coordinator)", "rmsnorm",
                        [(U, "trisc0", 8), (F, "trisc1", 30), (S, "trisc2", 20), (P, "trisc2", 12)], core=cc))
     seq.append(dop("attn", "attn proj shard (matmul)", "matmul",
-                   [(U, "trisc0", 10), (F, "trisc1", 200), (P, "trisc2", 18)], core=cc))
+                   [(U, "trisc0", 10), (F, "trisc1", 200), (P, "trisc2", 18)], flow=MATMUL_FACE_FLOW, core=cc))
     seq.append(dop("sdpa", "flash SDPA shard", "flash_attention",
                    [(U, "trisc0", 30), (F, "trisc1", 220), (S, "trisc2", 90), (P, "trisc2", 24)],
                    flow=SDPA_FLOW, core=cc))
     seq.append(dop("mlp", "MLP proj shard (gate/up/down)", "matmul",
-                   [(U, "trisc0", 14), (F, "trisc1", 280), (S, "trisc2", 30), (P, "trisc2", 22)], core=cc))
+                   [(U, "trisc0", 14), (F, "trisc1", 280), (S, "trisc2", 30), (P, "trisc2", 22)], flow=MATMUL_FACE_FLOW, core=cc))
     if i == 0:
         seq.append(dop("comb", "gather + combine (coordinator)", "eltwise",
                        [(U, "trisc0", 8), (F, "trisc1", 40), (P, "trisc2", 16)], core=cc))
