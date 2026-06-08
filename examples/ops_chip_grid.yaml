@@ -1,0 +1,99 @@
+# Multi-core verification example: a 2x2 grid of Tensix cores with a fan-in.
+#
+#   Core (0,0): mm_init + matmul partial P0  ─┐
+#                                             ├─► Core (0,1): reduce  ──► Core (1,1): exp (activation)
+#   Core (1,0): matmul partial P1            ─┘
+#
+# Open the flow view and switch to "Chip" mode to step through the NoC
+# interactions (P0→reduce, P1→reduce, reduce→act). The reduce core receives
+# from two cores. Single-op mode also works (the act op authors an explicit
+# flow; mm_init is greyed as an init op).
+#
+#   tt-prism serve examples/ops_chip_grid.yaml      # Gantt (noc deps in purple)
+#   →  http://127.0.0.1:8765/flow   →  toggle "Chip"
+
+title: "2x2 chip: partials → reduce → activation"
+clock_ghz: 1.0
+grid_clocks: 32
+dest_banks: 2
+
+cores:
+  - { id: nw, x: 0, y: 0, name: "Core (0,0)" }
+  - { id: ne, x: 1, y: 0, name: "Core (1,0)" }
+  - { id: sw, x: 0, y: 1, name: "Core (0,1)" }
+  - { id: se, x: 1, y: 1, name: "Core (1,1)" }
+
+lanes:
+  - { id: trisc0, name: "TRISC 0", order: 0 }
+  - { id: trisc1, name: "TRISC 1", order: 1 }
+  - { id: trisc2, name: "TRISC 2", order: 2 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+ops:
+  # --- Core (0,0): init + first partial ---
+  - id: mmi
+    name: "mm_init"
+    kind: init
+    core_id: nw
+    blocks:
+      - { id: mmi_c, lane_id: trisc1, resource_id: fpu, label: "configure", duration_clocks: 16 }
+  - id: p0
+    name: "matmul P0"
+    kind: matmul
+    core_id: nw
+    tiles: 4
+    blocks:
+      - { id: p0_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: p0_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 0 }
+      - { id: p0_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+
+  # --- Core (1,0): second partial ---
+  - id: p1
+    name: "matmul P1"
+    kind: matmul
+    core_id: ne
+    tiles: 4
+    blocks:
+      - { id: p1_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: p1_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 0 }
+      - { id: p1_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+
+  # --- Core (0,1): reduce (sum of the two partials) ---
+  - id: red
+    name: "reduce P0+P1"
+    kind: reduce
+    core_id: sw
+    tiles: 4
+    blocks:
+      - { id: red_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 64 }
+      - { id: red_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 40, dest_bank: 0 }
+      - { id: red_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+
+  # --- Core (1,1): activation (exp) with an explicit single-op flow ---
+  - id: act
+    name: "exp activation"
+    kind: sfpu_unary
+    core_id: se
+    tiles: 4
+    flow:
+      - { id: a1, label: "Unpack reduced tiles", reads: [l1_in], writes: [srca] }
+      - { id: a2, label: "Copy to DEST",          reads: [srca],  writes: [dest], expr: "DEST = x" }
+      - { id: a3, label: "Load to SFPU",          reads: [dest],  writes: [sfpu] }
+      - { id: a4, label: "exp() on SFPU",         reads: [sfpu],  writes: [sfpu], expr: "LReg = exp(x)" }
+      - { id: a5, label: "Store back to DEST",    reads: [sfpu],  writes: [dest], expr: "DEST = exp(x)" }
+      - { id: a6, label: "Pack to L1",            reads: [dest],  writes: [l1_out] }
+    blocks:
+      - { id: act_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 40 }
+      - { id: act_s, lane_id: trisc1, resource_id: sfpu,   duration_clocks: 80, dest_bank: 0 }
+      - { id: act_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+
+dependencies:
+  # NoC fan-in: both partials go to the reduce core, then reduce → activation.
+  - { from: p0,  to: red, kind: noc, min_gap_clocks: 40, label: "P0 → reduce" }
+  - { from: p1,  to: red, kind: noc, min_gap_clocks: 40, label: "P1 → reduce" }
+  - { from: red, to: act, kind: noc, min_gap_clocks: 40, label: "reduce → exp" }
