@@ -118,6 +118,10 @@ class FlowStep(BaseModel):
     label: str
     reads: list[FlowStageKind] = Field(default_factory=list)
     writes: list[FlowStageKind] = Field(default_factory=list)
+    # Identity of the datum this step produces/moves (e.g. "Q", "K", "scores",
+    # "exp(P)"). The flow view draws one labeled token per datum so you can see
+    # *which* data flows where and how datums combine. Defaults to the label.
+    data: str = ""
     expr: str = ""
     note: str = ""
 
