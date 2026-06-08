@@ -100,3 +100,24 @@ def test_single_core_backward_compatible():
     assert {l.id for l in flat.lanes} == {"trisc0", "trisc1", "trisc2"}
     assert all(l.group is None for l in flat.lanes)
     assert all("::" not in w.lane_id for w in flat.work_items)
+
+
+def test_render_replicated_ops_with_cross_op_dep():
+    # Two SPMD compute ops on the same on_cores, chained by l1_data. The flattener
+    # replicates bars per core; every emitted dependency must reference an
+    # existing work-item id (regression: it used to reference the canonical id).
+    def mm(op_id):
+        return Op(id=op_id, name=op_id, core_id="c00", on_cores=["c00", "c10"], blocks=[
+            Block(id=f"{op_id}_u", lane_id="trisc0", resource_id="unpack", duration_clocks=8),
+            Block(id=f"{op_id}_f", lane_id="trisc1", resource_id="fpu", duration_clocks=16),
+            Block(id=f"{op_id}_p", lane_id="trisc2", resource_id="pack", duration_clocks=8)])
+    d = _base(C2, [mm("a"), mm("b")],
+              deps=[Dependency.model_validate({"from": "a", "to": "b", "kind": "l1_data"})])
+    flat = to_render_diagram(d)                      # must not raise
+    ids = {w.id for w in flat.work_items}
+    # bars replicated across both cores
+    assert any(w.lane_id.startswith("c00::") for w in flat.work_items)
+    assert any(w.lane_id.startswith("c10::") for w in flat.work_items)
+    # every dependency endpoint resolves to a real work-item
+    for dep in flat.dependencies:
+        assert dep.from_ in ids and dep.to in ids

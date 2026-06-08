@@ -289,15 +289,20 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
         kind = "dep" if e.reason == "intra_op" else e.reason
         if kind not in ("fifo", "dep", "flow", "src_valid", "dst_valid", "l1_data", "issue_order", "noc"):
             kind = "dep"
-        of, ot = op_of_block.get(e.frm), op_of_block.get(e.to)
-        rc = render_cores(of)
-        if of is not None and of is ot and len(rc) > 1:
-            # intra-op edge on a replicated op → one arrow per core
-            for core in rc:
-                deps.append(Dependency.model_validate(
-                    {"from": wid(e.frm, core, len(rc)), "to": wid(e.to, core, len(rc)), "kind": kind}))
-        else:
-            deps.append(Dependency.model_validate({"from": e.frm, "to": e.to, "kind": kind}))
+        # Both endpoints may have been replicated across cores (ids carry an
+        # @@core suffix). Connect them so every emitted dep references an id that
+        # actually exists: same core-set → one arrow per core (the SPMD diagonal);
+        # different core-sets → the cross product (rare).
+        rc_frm = render_cores(op_of_block.get(e.frm))
+        rc_to = render_cores(op_of_block.get(e.to))
+        pairs = ([(c, c) for c in rc_frm] if rc_frm == rc_to
+                 else [(cf, ct) for cf in rc_frm for ct in rc_to])
+        for cf, ct in pairs:
+            deps.append(Dependency.model_validate({
+                "from": wid(e.frm, cf, len(rc_frm)),
+                "to": wid(e.to, ct, len(rc_to)),
+                "kind": kind,
+            }))
 
     return Diagram(
         title=diagram.title,
