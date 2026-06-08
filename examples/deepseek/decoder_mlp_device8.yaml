@@ -71,6 +71,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c0
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -86,6 +88,8 @@ ops:
   kind: rmsnorm
   tiles: 4
   core_id: c0
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -122,6 +126,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c0
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -215,6 +221,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c0
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -379,6 +387,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c0
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -479,6 +489,8 @@ ops:
   kind: eltwise
   tiles: 4
   core_id: c0
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -508,6 +520,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c1
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -523,6 +537,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c1
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -616,6 +632,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c1
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -780,6 +798,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c1
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -880,6 +900,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c2
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -895,6 +917,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c2
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -988,6 +1012,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c2
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1152,6 +1178,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c2
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1252,6 +1280,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c3
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -1267,6 +1297,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c3
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1360,6 +1392,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c3
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1524,6 +1558,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c3
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1624,6 +1660,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c4
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -1639,6 +1677,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c4
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1732,6 +1772,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c4
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1896,6 +1938,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c4
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -1996,6 +2040,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c5
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -2011,6 +2057,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c5
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -2104,6 +2152,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c5
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -2268,6 +2318,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c5
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -2368,6 +2420,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c6
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -2383,6 +2437,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c6
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -2476,6 +2532,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c6
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -2640,6 +2698,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c6
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -2740,6 +2800,8 @@ ops:
   kind: init
   tiles: 4
   core_id: c7
+  on_cores: []
+  transfers: []
   category: null
   flow: []
   blocks:
@@ -2755,6 +2817,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c7
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -2848,6 +2912,8 @@ ops:
   kind: flash_attention
   tiles: 4
   core_id: c7
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''
@@ -3012,6 +3078,8 @@ ops:
   kind: matmul
   tiles: 4
   core_id: c7
+  on_cores: []
+  transfers: []
   category: null
   flow:
   - id: ''

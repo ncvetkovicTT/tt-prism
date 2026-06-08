@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from tt_prism import storage
-from tt_prism.models import Block, Core, Dependency, Diagram, FlowStep, Lane, Op, Resource
+from tt_prism.models import Block, Core, Dependency, Diagram, FlowStep, Lane, Op, Resource, Transfer
 
 MESH_ROWS, MESH_COLS = 4, 2          # test parametrization (test_decoder_block.py:859)
 SENDER = (1, 0)                      # input sender chip (test_decoder_block.py:853) -> dev2
@@ -223,3 +223,64 @@ ddiagram = Diagram(
 out2 = Path(__file__).with_name("decoder_mlp_device8.yaml")
 storage.dump(ddiagram, out2)
 print(f"wrote {out2}  ({len(dcores)} cores, {len(dops)} ops, {len(ddeps)} deps)")
+
+
+# ======================================================================
+# Unified WALKTHROUGH: the decoder as ONE ordered timeline over the 8-chip
+# mesh — compute phases (Tensix engines) interleaved with the cross-chip
+# collectives as explicit data-movement ops, for the unified flow view.
+# ======================================================================
+ALL = [c.id for c in cores]            # the 8 chips
+U, F, S, P = "unpack", "fpu", "sfpu", "pack"
+
+def phase(opid, name, kind, blocks, flow=None):
+    bl = [Block(id=f"w_{opid}_{r}", lane_id=lane, resource_id=r, label=r, duration_clocks=d)
+          for (r, lane, d) in blocks]
+    return Op(id=f"w_{opid}", name=name, kind=kind, core_id=cores[0].id, on_cores=ALL,
+              tiles=4, blocks=bl, flow=flow or [])
+
+def move(opid, name, kind, legs):
+    return Op(id=f"w_{opid}", name=name, kind=kind,
+              transfers=[Transfer.model_validate({"from": f, "to": t, "label": lbl}) for (f, t, lbl) in legs])
+
+# collective transfer sets (same corrected topologies as decoder_mlp_chip)
+bcast_legs = [(cid(*SENDER), c, "x̂ [1,7168]") for c in ALL if c != cid(*SENDER)]
+sdpa_legs  = [(cid(row, col), cid(row + 1, col), "SDPA partial")
+              for col in range(MESH_COLS) for row in range(MESH_ROWS - 1)]
+allred_legs = [(cid(row, 1), cid(row, 0), "o_proj partial") for row in range(MESH_ROWS)]
+gather_legs = [(cid(row, col), cid(row + 1, col), "SP output")
+               for col in range(MESH_COLS) for row in range(MESH_ROWS - 1)]
+r2o_legs = []
+for col in range(MESH_COLS):
+    r2o_legs += [(cid(0, col), cid(1, col), "leaf"), (cid(3, col), cid(2, col), "leaf"),
+                 (cid(2, col), cid(1, col), "row2→row1")]
+r2o_legs.append((cid(1, 0), cid(1, 1), "col0→root"))
+
+wops = [
+    phase("rmsn1", "rmsnorm_in", "rmsnorm",
+          [(U, "trisc0", 8), (F, "trisc1", 30), (S, "trisc2", 20), (P, "trisc2", 12)]),
+    move("bcast", "input broadcast", "broadcast", bcast_legs),
+    phase("qproj", "q_proj (matmul)", "matmul", [(U, "trisc0", 10), (F, "trisc1", 220), (P, "trisc2", 20)], flow=MATMUL_FACE_FLOW),
+    phase("kvproj", "kv_a/b_proj (matmul)", "matmul", [(U, "trisc0", 8), (F, "trisc1", 120), (P, "trisc2", 16)], flow=MATMUL_FACE_FLOW),
+    phase("rope", "rope + kv_cache", "rope", [(U, "trisc0", 8), (F, "trisc1", 24), (S, "trisc2", 40), (P, "trisc2", 20)]),
+    phase("sdpa", "flash_mla SDPA", "flash_attention",
+          [(U, "trisc0", 40), (F, "trisc1", 300), (S, "trisc2", 120), (P, "trisc2", 30)], flow=SDPA_FLOW),
+    move("sdpared", "SDPA all-reduce (ring, axis 0)", "sdpa_reduce", sdpa_legs),
+    phase("oproj", "post_sdpa kv_b2+o_proj", "matmul", [(U, "trisc0", 10), (F, "trisc1", 260), (P, "trisc2", 24)], flow=MATMUL_FACE_FLOW),
+    move("allred", "o_proj all-reduce (cols, axis 1)", "all_reduce", allred_legs),
+    move("allgather", "AllGather (rows, axis 0)", "allgather", gather_legs),
+    phase("rmsn2", "rmsnorm_mlp", "rmsnorm", [(U, "trisc0", 8), (F, "trisc1", 30), (S, "trisc2", 20), (P, "trisc2", 12)]),
+    phase("gateup", "gate_up_proj + silu", "matmul", [(U, "trisc0", 16), (F, "trisc1", 280), (S, "trisc2", 40), (P, "trisc2", 24)], flow=MATMUL_FACE_FLOW),
+    phase("down", "down_proj + shared_expert", "matmul", [(U, "trisc0", 16), (F, "trisc1", 260), (S, "trisc2", 30), (P, "trisc2", 28)], flow=MATMUL_FACE_FLOW),
+    phase("comb", "combine", "eltwise", [(U, "trisc0", 8), (F, "trisc1", 40), (P, "trisc2", 16)]),
+    move("r2o", "reduce-to-one (tree → root)", "reduce-to-one", r2o_legs),
+]
+wdiagram = Diagram(
+    title="DeepSeek-V3 decoder walkthrough — 8-chip mesh (compute + NoC, in order)",
+    clock_ghz=1.0, grid_clocks=64, dest_banks=2,
+    cores=cores, lanes=LANES, resources=RES, ops=wops,
+)
+out3 = Path(__file__).with_name("decoder_walkthrough.yaml")
+storage.dump(wdiagram, out3)
+nmove = sum(1 for o in wops if o.transfers)
+print(f"wrote {out3}  ({len(cores)} chips, {len(wops)} ops: {len(wops)-nmove} compute + {nmove} movement)")

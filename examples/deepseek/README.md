@@ -14,6 +14,14 @@ Despite the `_mlp` name, the test runs the **full DecoderBlock**: MLA attention
 (`enable_routing=False`), tiling the 18432 intermediate over the MoE kernel as
 8×2048 "experts" + a shared expert.
 
+> **Best way to see the whole thing:** open
+> [`decoder_walkthrough.yaml`](decoder_walkthrough.yaml) in the flow view
+> (`tt-prism serve examples/deepseek/decoder_walkthrough.yaml` → `/flow`). It's the
+> decoder as **one unified timeline** over the 8-chip mesh: press Next to walk
+> every phase in order — compute phases animate the Tensix engines (faces through
+> Src/DEST), and the 5 cross-chip collectives (broadcast, SDPA all-reduce,
+> o_proj all-reduce, AllGather, reduce-to-one) animate the chip grid.
+
 ## Two scales: 8 devices × 8 cores
 
 The workload is parallel at **two** levels and we model each:

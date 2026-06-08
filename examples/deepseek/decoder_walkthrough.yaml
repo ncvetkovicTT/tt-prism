@@ -1,0 +1,1089 @@
+title: "DeepSeek-V3 decoder walkthrough \u2014 8-chip mesh (compute + NoC, in order)"
+clock_ghz: 1.0
+grid_clocks: 64
+dest_banks: 2
+cores:
+- id: dev0
+  x: 0
+  y: 0
+  name: chip0 (0,0)
+- id: dev1
+  x: 1
+  y: 0
+  name: chip1 (0,1)
+- id: dev2
+  x: 0
+  y: 1
+  name: chip2 (1,0) [sender]
+- id: dev3
+  x: 1
+  y: 1
+  name: chip3 (1,1) [root]
+- id: dev4
+  x: 0
+  y: 2
+  name: chip4 (2,0)
+- id: dev5
+  x: 1
+  y: 2
+  name: chip5 (2,1)
+- id: dev6
+  x: 0
+  y: 3
+  name: chip6 (3,0)
+- id: dev7
+  x: 1
+  y: 3
+  name: chip7 (3,1)
+lanes:
+- id: trisc0
+  name: TRISC0/UNPACK
+  order: 0
+  group: null
+  group_label: ''
+- id: trisc1
+  name: TRISC1/FPU
+  order: 1
+  group: null
+  group_label: ''
+- id: trisc2
+  name: TRISC2/SFPU+PACK
+  order: 2
+  group: null
+  group_label: ''
+resources:
+- id: unpack
+  name: UNPACK
+  color: '#ef9a9a'
+- id: fpu
+  name: FPU
+  color: '#a5d6a7'
+- id: sfpu
+  name: SFPU
+  color: '#90caf9'
+- id: pack
+  name: PACK
+  color: '#ffcc80'
+work_items: []
+ops:
+- id: w_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow: []
+  blocks:
+  - id: w_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: w_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: w_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: w_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: w_bcast
+  name: input broadcast
+  kind: broadcast
+  tiles: 1
+  core_id: null
+  on_cores: []
+  transfers:
+  - from: dev2
+    to: dev0
+    label: "x\u0302 [1,7168]"
+  - from: dev2
+    to: dev1
+    label: "x\u0302 [1,7168]"
+  - from: dev2
+    to: dev3
+    label: "x\u0302 [1,7168]"
+  - from: dev2
+    to: dev4
+    label: "x\u0302 [1,7168]"
+  - from: dev2
+    to: dev5
+    label: "x\u0302 [1,7168]"
+  - from: dev2
+    to: dev6
+    label: "x\u0302 [1,7168]"
+  - from: dev2
+    to: dev7
+    label: "x\u0302 [1,7168]"
+  category: null
+  flow: []
+  blocks: []
+- id: w_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
+  blocks:
+  - id: w_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: w_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: w_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: w_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
+  blocks:
+  - id: w_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: w_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: w_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: w_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow: []
+  blocks:
+  - id: w_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: w_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: w_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: w_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: w_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow:
+  - id: ''
+    label: unpack K F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack K F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: K.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack Q F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: Q.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: S
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: m
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp F0/1 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.01
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: exp F2/3 (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: P.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack V F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: V.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: O
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: l
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: out.23
+    expr: ''
+    note: ''
+  blocks:
+  - id: w_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: w_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: w_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: w_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: w_sdpared
+  name: SDPA all-reduce (ring, axis 0)
+  kind: sdpa_reduce
+  tiles: 1
+  core_id: null
+  on_cores: []
+  transfers:
+  - from: dev0
+    to: dev2
+    label: SDPA partial
+  - from: dev2
+    to: dev4
+    label: SDPA partial
+  - from: dev4
+    to: dev6
+    label: SDPA partial
+  - from: dev1
+    to: dev3
+    label: SDPA partial
+  - from: dev3
+    to: dev5
+    label: SDPA partial
+  - from: dev5
+    to: dev7
+    label: SDPA partial
+  category: null
+  flow: []
+  blocks: []
+- id: w_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
+  blocks:
+  - id: w_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: w_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: w_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: w_allred
+  name: o_proj all-reduce (cols, axis 1)
+  kind: all_reduce
+  tiles: 1
+  core_id: null
+  on_cores: []
+  transfers:
+  - from: dev1
+    to: dev0
+    label: o_proj partial
+  - from: dev3
+    to: dev2
+    label: o_proj partial
+  - from: dev5
+    to: dev4
+    label: o_proj partial
+  - from: dev7
+    to: dev6
+    label: o_proj partial
+  category: null
+  flow: []
+  blocks: []
+- id: w_allgather
+  name: AllGather (rows, axis 0)
+  kind: allgather
+  tiles: 1
+  core_id: null
+  on_cores: []
+  transfers:
+  - from: dev0
+    to: dev2
+    label: SP output
+  - from: dev2
+    to: dev4
+    label: SP output
+  - from: dev4
+    to: dev6
+    label: SP output
+  - from: dev1
+    to: dev3
+    label: SP output
+  - from: dev3
+    to: dev5
+    label: SP output
+  - from: dev5
+    to: dev7
+    label: SP output
+  category: null
+  flow: []
+  blocks: []
+- id: w_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow: []
+  blocks:
+  - id: w_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: w_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: w_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: w_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: w_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
+  blocks:
+  - id: w_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: w_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: w_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: w_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: w_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow:
+  - id: ''
+    label: unpack act F0/1
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack act F2/3
+    reads:
+    - l1_in
+    writes:
+    - srca
+    data: A.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F0/1
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: unpack wt F2/3
+    reads:
+    - l1_in
+    writes:
+    - srcb
+    data: W.23
+    expr: ''
+    note: ''
+  - id: ''
+    label: matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: acc
+    expr: "acc += A\xB7W"
+    note: ''
+  - id: ''
+    label: pack out F0/1
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.01
+    expr: ''
+    note: ''
+  - id: ''
+    label: pack out F2/3
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: O.23
+    expr: ''
+    note: ''
+  blocks:
+  - id: w_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: w_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: w_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: w_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: w_comb
+  name: combine
+  kind: eltwise
+  tiles: 4
+  core_id: dev0
+  on_cores:
+  - dev0
+  - dev1
+  - dev2
+  - dev3
+  - dev4
+  - dev5
+  - dev6
+  - dev7
+  transfers: []
+  category: null
+  flow: []
+  blocks:
+  - id: w_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: w_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: w_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: w_r2o
+  name: "reduce-to-one (tree \u2192 root)"
+  kind: reduce-to-one
+  tiles: 1
+  core_id: null
+  on_cores: []
+  transfers:
+  - from: dev0
+    to: dev2
+    label: leaf
+  - from: dev6
+    to: dev4
+    label: leaf
+  - from: dev4
+    to: dev2
+    label: "row2\u2192row1"
+  - from: dev1
+    to: dev3
+    label: leaf
+  - from: dev7
+    to: dev5
+    label: leaf
+  - from: dev5
+    to: dev3
+    label: "row2\u2192row1"
+  - from: dev2
+    to: dev3
+    label: "col0\u2192root"
+  category: null
+  flow: []
+  blocks: []
+dependencies: []
