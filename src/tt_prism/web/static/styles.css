@@ -145,5 +145,7 @@ button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-all
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 .token.datum.active { outline: 2px solid #18221f; outline-offset: 1px; opacity: 1; z-index: 6; }
 .token.datum.dimmed { opacity: 0.28; filter: saturate(0.5); }
+/* consumed: operand was read into the result and has left Src — fade it out. */
+.token.datum.consumed { opacity: 0.18; filter: saturate(0.3) grayscale(0.4); }
 .flow-caption .datum-chip { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px;
   background: #18221f; color: #fff; font-size: 11px; font-weight: 700; }
