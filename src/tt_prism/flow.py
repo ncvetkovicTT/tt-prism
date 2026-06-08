@@ -62,29 +62,36 @@ def _stages_used(steps: list[FlowStep]) -> list[str]:
 
 
 def flow_payload(diagram: Diagram) -> dict:
-    """JSON-able payload for the flow view: every op (init ones flagged so the
-    client can grey them out) with its resolved steps and the stages they use."""
+    """JSON-able payload for the unified flow walkthrough: the chip grid (cores)
+    plus every op in YAML order. A **data-movement** op (has ``transfers``) is
+    rendered on the grid; a **compute** op carries its resolved dataflow steps;
+    an **init** op is flagged (skipped in the walk)."""
+    cores = [{"id": c.id, "x": c.x, "y": c.y, "name": c.display_name}
+             for c in diagram.effective_cores()]
+    default_core = cores[0]["id"] if cores else None
+
     ops = []
     for op in diagram.ops:
-        # Init ops have no dataflow; emit them flagged but empty (the client
-        # greys them out and never opens them).
+        base = {
+            "id": op.id, "name": op.name or op.id, "kind": op.kind,
+            "tiles": op.tiles, "core_id": op.core_id,
+            "on_cores": list(op.on_cores) or ([op.core_id] if op.core_id else []),
+            "is_init": op.is_init, "is_movement": op.is_movement,
+        }
+        if op.is_movement:
+            ops.append({**base, "derived": False, "stages": [], "steps": [],
+                        "transfers": [{"from": t.from_, "to": t.to, "label": t.label}
+                                      for t in op.transfers]})
+            continue
         if op.is_init:
-            ops.append({
-                "id": op.id, "name": op.name or op.id, "kind": op.kind,
-                "tiles": op.tiles, "core_id": op.core_id,
-                "is_init": True, "derived": False, "stages": [], "steps": [],
-            })
+            ops.append({**base, "derived": False, "stages": [], "steps": [], "transfers": []})
             continue
         steps = resolved_flow(op)
         ops.append({
-            "id": op.id,
-            "name": op.name or op.id,
-            "kind": op.kind,
-            "tiles": op.tiles,
-            "core_id": op.core_id,
-            "is_init": op.is_init,
+            **base,
             "derived": not op.flow,            # True → steps came from the generic fallback
             "stages": _stages_used(steps),
+            "transfers": [],
             "steps": [
                 {
                     "id": s.id,
@@ -102,6 +109,7 @@ def flow_payload(diagram: Diagram) -> dict:
         "title": diagram.title,
         "stage_order": STAGE_ORDER,
         "stage_labels": STAGE_LABELS,
+        "cores": cores,
         "ops": ops,
     }
 

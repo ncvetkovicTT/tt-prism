@@ -183,3 +183,14 @@ button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-all
 .step-list li.current .noc-phase { color: #4a1568; }
 
 .noc-clk { font-family: ui-monospace, monospace; font-size: 10px; color: #6b21a8; }
+
+/* ---- unified flow walkthrough ---- */
+.walk-main { display: grid; grid-template-columns: 240px 1fr; height: calc(100vh - 56px); }
+.walk-center { padding: 14px 18px; overflow: auto; }
+.walk-center .chip-grid { position: relative; display: grid; gap: 22px; align-items: start;
+  padding: 8px; margin-bottom: 14px; }
+.op-item.is-move .op-name { color: #6b21a8; }
+.tag.move { background: #f3e8ff; color: #6b21a8; }
+.core-card.computing { border-color: #2b8f7f; box-shadow: 0 0 0 2px rgba(43,143,127,0.25); }
+.noc-path { fill: none; stroke: #8e24aa; stroke-width: 2.5; marker-end: url(#noc-arrow); }
+.flow-diagram.idle { opacity: 0.45; }

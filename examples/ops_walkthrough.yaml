@@ -1,0 +1,89 @@
+# Unified flow walkthrough demo (2 cores).
+#
+# The flow view (/flow) shows ONE timeline. Press Next/Prev to walk every op in
+# this order: compute ops animate the Tensix engines (faces L1→Src→DEST→L1),
+# data-movement ops (which carry `transfers`) freeze the engines and animate the
+# chip grid (the cores mcasting/gathering). The chip grid is always shown.
+#
+#   tt-prism serve examples/ops_walkthrough.yaml   →   http://127.0.0.1:8765/flow
+
+title: "unified walkthrough: rmsnorm → bcast → matmul → gather → add"
+clock_ghz: 1.0
+grid_clocks: 32
+
+cores:
+  - { id: c0, x: 0, y: 0, name: "Core (0,0)" }
+  - { id: c1, x: 1, y: 0, name: "Core (1,0)" }
+
+lanes:
+  - { id: trisc0, name: "TRISC0/UNPACK", order: 0 }
+  - { id: trisc1, name: "TRISC1/FPU", order: 1 }
+  - { id: trisc2, name: "TRISC2/SFPU+PACK", order: 2 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+ops:
+  # --- compute on Core (0,0): normalize the input ---
+  - id: rms
+    name: "rmsnorm"
+    kind: rmsnorm
+    core_id: c0
+    on_cores: [c0]
+    flow:
+      - { label: "unpack x", data: "x", reads: [l1_in], writes: [srca] }
+      - { label: "sum(x^2)·scalar (FPU)", data: "ss", reads: [srca], writes: [dest], expr: "Σx²" }
+      - { label: "rsqrt (SFPU)", data: "inv", reads: [dest], writes: [sfpu], expr: "1/√(ss+ε)" }
+      - { label: "x·inv (FPU)", data: "n", reads: [srca, sfpu], writes: [dest], expr: "x/RMS" }
+      - { label: "pack", data: "out", reads: [dest], writes: [l1_out] }
+    blocks:
+      - { id: rms_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 12, dest_bank: 0 }
+      - { id: rms_f, lane_id: trisc1, resource_id: fpu,    duration_clocks: 30, dest_bank: 0 }
+      - { id: rms_s, lane_id: trisc2, resource_id: sfpu,   duration_clocks: 18, dest_bank: 0 }
+      - { id: rms_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 12, dest_bank: 0 }
+
+  # --- data movement: Core (0,0) broadcasts the normalized activation to (1,0) ---
+  - id: bcast
+    name: "broadcast x̂"
+    kind: broadcast
+    transfers:
+      - { from: c0, to: c1, label: "x̂ [1,K]" }
+
+  # --- compute on both cores: a matmul shard (face-level) ---
+  - id: mm
+    name: "matmul shard"
+    kind: matmul
+    core_id: c0
+    on_cores: [c0, c1]
+    flow:
+      - { label: "unpack A F0/1", data: "A.01", reads: [l1_in], writes: [srca] }
+      - { label: "unpack A F2/3", data: "A.23", reads: [l1_in], writes: [srca] }
+      - { label: "unpack W F0/1", data: "W.01", reads: [l1_in], writes: [srcb] }
+      - { label: "unpack W F2/3", data: "W.23", reads: [l1_in], writes: [srcb] }
+      - { label: "matmul (FPU)",  data: "acc", reads: [srca, srcb], writes: [dest], expr: "acc += A·W" }
+      - { label: "pack", data: "y", reads: [dest], writes: [l1_out] }
+    blocks:
+      - { id: mm_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 16, dest_bank: 0 }
+      - { id: mm_f, lane_id: trisc1, resource_id: fpu,    duration_clocks: 64, dest_bank: 0 }
+      - { id: mm_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 20, dest_bank: 0 }
+
+  # --- data movement: (1,0) gathers its partial back to (0,0) ---
+  - id: gather
+    name: "gather partials"
+    kind: gather
+    transfers:
+      - { from: c1, to: c0, label: "y partial" }
+
+  # --- compute on Core (0,0): combine and write out ---
+  - id: addout
+    name: "add + pack"
+    kind: eltwise
+    core_id: c0
+    on_cores: [c0]
+    blocks:
+      - { id: add_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 10 }
+      - { id: add_f, lane_id: trisc1, resource_id: fpu,    duration_clocks: 24, dest_bank: 0 }
+      - { id: add_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 16, dest_bank: 0 }

@@ -309,48 +309,46 @@ and a core header, so cores are visually decoupled. See
 [`examples/ops_multicore.yaml`](examples/ops_multicore.yaml). Single-core
 diagrams (no `cores` declared) render exactly as before.
 
-### Flow view (per-op dataflow)
+### Flow view — unified walkthrough
 
 Alongside the Gantt timeline, the web app has a **flow view** (`/flow`, or the
-"Flow view →" button in the editor) that shows, for one *execute* op at a time,
-how a tile moves through the Tensix storage stages — Input L1 → SrcA/SrcB →
-DEST → SFPU → Output L1 — one step at a time, with tile tokens hopping between
-stages and the active stages highlighting.
+"Flow view →" button in the editor): **one timeline** that walks every op in YAML
+order. The chip grid (however many cores the YAML defines — even one) is always
+shown. Press **Prev/Next/Play**:
 
-- The left column lists the ops in YAML order. **Init ops** (whose name/kind
-  mentions `init`/`reinit`, or `category: init`) have no dataflow and are
-  greyed out; everything else is an **execute** op you can open.
-- Steps come from the op's explicit `flow:` if authored, else a generic
-  unpack→math→pack flow is derived from its blocks (and marked "derived").
+- a **compute** op animates the Tensix engines — tile/face tokens move through
+  Input L1 → SrcA/SrcB → DEST → SFPU → Output L1, operands get *consumed* into
+  the DEST result, and the active stages highlight;
+- a **data-movement** op (one that carries `transfers`) freezes the engines and
+  animates the **chip grid** — the cores mcasting/gathering (several transfers at
+  once if the op lists several);
+- within a compute op you step its dataflow; continuing advances to the next op.
+
+Data movement is **explicit and ordered**: you place a movement op in the `ops`
+list exactly where it happens, listing its core→core `transfers`. (Init ops —
+name/kind mentions `init`/`reinit`, or `category: init` — are config markers with
+no dataflow.) Compute-op steps come from the op's explicit `flow:` if authored,
+else a generic unpack→math→pack flow derived from its blocks.
 
 ```yaml
 ops:
-  - id: mexp
-    name: "matmul + exp"
-    kind: matmul
-    tiles: 4
-    flow:                       # each step: which stages it reads/writes (+ optional DEST expr)
-      - { label: "Unpack A & B",        reads: [l1_in],       writes: [srca, srcb] }
-      - { label: "Multiply-accumulate", reads: [srca, srcb],  writes: [dest], expr: "DEST += A·B" }
-      - { label: "Reuse via MOVD2B",    reads: [dest],        writes: [srcb] }
-      - { label: "Load to SFPU",        reads: [dest],        writes: [sfpu] }
-      - { label: "exp() then store",    reads: [sfpu],        writes: [dest], expr: "DEST = exp(acc)" }
-      - { label: "Pack to L1",          reads: [dest],        writes: [l1_out] }
-    blocks: [ ... ]             # the Gantt-side timing (unchanged)
+  - id: rms
+    name: rmsnorm
+    core_id: c0
+    flow: [ ... ]               # compute: stages each step reads/writes (+ DEST expr)
+    blocks: [ ... ]
+  - id: bcast                   # data-movement op: shown on the chip grid, in order
+    name: broadcast
+    kind: broadcast
+    transfers:
+      - { from: c0, to: c1, label: "x̂ [1,K]" }
+      - { from: c0, to: c2, label: "x̂ [1,K]" }   # several legs = one step, drawn together
 ```
 
-Stage vocabulary: `l1_in`, `srca`, `srcb`, `dest`, `sfpu`, `l1_out`. See
-[`examples/ops_flow_demo.yaml`](examples/ops_flow_demo.yaml).
-
-The flow view has two modes (toggle in the toolbar):
-
-- **Single op** — the per-op dataflow described above.
-- **Chip** — the whole chip: every core as its own `[L1 · Src · DEST · L1]`
-  block (laid out by its `x, y`), running independently. Step through the
-  **NoC interactions** — derived from dependencies whose two ops live on
-  different cores (mark them `kind: noc` to colour them distinctly) — and each
-  step lights up the producer core → consumer core with a send/receive arrow.
-  See [`examples/ops_chip.yaml`](examples/ops_chip.yaml).
+Stage vocabulary: `l1_in`, `srca`, `srcb`, `dest`, `sfpu`, `l1_out`. A single-op
+compute example is [`examples/ops_flow_demo.yaml`](examples/ops_flow_demo.yaml);
+the full multi-core walkthrough is
+[`examples/ops_walkthrough.yaml`](examples/ops_walkthrough.yaml).
 
 ## Architecture
 

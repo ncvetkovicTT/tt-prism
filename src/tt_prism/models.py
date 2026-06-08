@@ -126,27 +126,48 @@ class FlowStep(BaseModel):
     note: str = ""
 
 
+class Transfer(BaseModel):
+    """One core→core data movement within a data-movement op (a NoC mcast/gather
+    leg). Several transfers in one op = they happen together in one flow step."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    from_: str = Field(alias="from")   # source core id
+    to: str                             # destination core id
+    label: str = ""
+
+
 class Op(BaseModel):
-    """One Compute API call (e.g. mm_init, reduce_tile, pack_untilize_dest),
-    which wraps one or more LLK calls. This is the lowest granularity tt-prism
-    models. ``blocks`` are listed in pipeline order: consecutive blocks get an
-    intra-op precedence edge (the unpack->math->pack handshake)."""
+    """One step in the workload. Either a **compute** op (one Compute API call,
+    with ``blocks`` and optionally a ``flow``) or a **data-movement** op (with
+    ``transfers``, e.g. a broadcast/gather across cores). The flow view walks the
+    ops in list order, animating the Tensix engines for compute ops and the chip
+    grid for data-movement ops."""
 
     model_config = ConfigDict(extra="forbid")
 
     id: str
     name: str = ""
-    kind: str = ""           # free-form: "matmul", "reduce", ... (drives nothing yet)
+    kind: str = ""           # free-form: "matmul", "reduce", "broadcast", ...
     tiles: int = Field(default=1, ge=1)   # number of tiles operated on (metadata for now)
-    core_id: str | None = None  # which Core this op runs on (None → the single/default core)
+    core_id: str | None = None  # which Core this op runs on (None → single/default core)
+    # Compute ops: cores this op runs on, for highlighting the chip grid (empty →
+    # just core_id, or all cores). Data-movement ops use `transfers` instead.
+    on_cores: list[str] = Field(default_factory=list)
+    # Non-empty → this is a DATA-MOVEMENT op (NoC mcast/gather); it has no engine
+    # work and is shown on the chip grid rather than the Tensix engine view.
+    transfers: list[Transfer] = Field(default_factory=list)
     # Op category. None → inferred: an op whose name/kind mentions "init"
     # (init, reinit, mm_init, …) is an init op; everything else is execute.
-    # The flow view only applies to execute ops.
     category: OpCategory | None = None
     # Optional explicit dataflow for the flow view. If empty, a generic
     # unpack→math→pack flow is derived from the op's blocks (see flow.py).
     flow: list[FlowStep] = Field(default_factory=list)
     blocks: list[Block] = Field(default_factory=list)
+
+    @property
+    def is_movement(self) -> bool:
+        return bool(self.transfers)
 
     @property
     def is_init(self) -> bool:
@@ -224,10 +245,16 @@ class Diagram(BaseModel):
             op_ids.add(op.id)
             if op.core_id is not None and op.core_id not in core_ids:
                 raise ValueError(f"op {op.id} references unknown core {op.core_id}")
-            if op.core_id is None and len(self.cores) > 1:
+            # Compute ops on a multi-core diagram must say which core they run on;
+            # data-movement ops span cores (use `transfers`) so are exempt.
+            if op.core_id is None and len(self.cores) > 1 and not op.is_movement:
                 raise ValueError(
                     f"op {op.id} must set core_id (diagram declares {len(self.cores)} cores)"
                 )
+            for cref in (*op.on_cores, *(t.from_ for t in op.transfers),
+                         *(t.to for t in op.transfers)):
+                if cref not in core_ids:
+                    raise ValueError(f"op {op.id} references unknown core {cref}")
             for b in op.blocks:
                 if b.id in block_ids or b.id in item_ids:
                     raise ValueError(f"duplicate block id: {b.id}")

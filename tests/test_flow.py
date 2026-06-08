@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from tt_prism.flow import STAGE_ORDER, chip_payload, execute_ops, flow_payload, resolved_flow
-from tt_prism.models import Block, Core, Dependency, Diagram, FlowStep, Lane, Op, Resource
+from tt_prism.models import Block, Core, Dependency, Diagram, FlowStep, Lane, Op, Resource, Transfer
 
 
 def _op(op_id, *, name="", kind="", category=None, flow=None, blocks=None):
@@ -189,3 +191,36 @@ def test_derived_flow_has_datum_labels():
     d = _diagram([_op("mm", name="matmul")])      # unpack -> fpu -> pack
     data = [s["data"] for s in flow_payload(d)["ops"][0]["steps"]]
     assert data == ["operands", "result", "output"]
+
+
+def test_movement_op_in_payload():
+    cores = [Core(id="c0", x=0, y=0), Core(id="c1", x=1, y=0)]
+    ops = [
+        Op(id="cp", name="compute", core_id="c0",
+           blocks=[Block(id="cp_u", lane_id="t0", resource_id="unpack", duration_clocks=10)]),
+        Op(id="bc", name="broadcast", kind="broadcast",
+           transfers=[Transfer.model_validate({"from": "c0", "to": "c1", "label": "x"})]),
+    ]
+    d = Diagram(title="t", cores=cores, lanes=[Lane(id="t0", name="T0", order=0)],
+                resources=[Resource(id="unpack", name="U")], ops=ops)
+    p = flow_payload(d)
+    assert [c["id"] for c in p["cores"]] == ["c0", "c1"]
+    by = {o["id"]: o for o in p["ops"]}
+    assert by["bc"]["is_movement"] is True
+    assert by["bc"]["transfers"] == [{"from": "c0", "to": "c1", "label": "x"}]
+    assert by["cp"]["is_movement"] is False and by["cp"]["transfers"] == []
+
+
+def test_movement_op_exempt_from_core_id_requirement():
+    # 2 cores, but the movement op needs no core_id (it spans cores via transfers)
+    Diagram(title="t", cores=[Core(id="c0", x=0, y=0), Core(id="c1", x=1, y=0)],
+            lanes=[Lane(id="t0", name="T0", order=0)], resources=[Resource(id="u", name="U")],
+            ops=[Op(id="cp", core_id="c0", blocks=[Block(id="b", lane_id="t0", resource_id="u")]),
+                 Op(id="bc", transfers=[Transfer.model_validate({"from": "c0", "to": "c1"})])])
+
+
+def test_movement_op_bad_core_rejected():
+    with pytest.raises(Exception):
+        Diagram(title="t", cores=[Core(id="c0", x=0, y=0)],
+                lanes=[Lane(id="t0", name="T0", order=0)], resources=[Resource(id="u", name="U")],
+                ops=[Op(id="bc", transfers=[Transfer.model_validate({"from": "c0", "to": "nope"})])])
