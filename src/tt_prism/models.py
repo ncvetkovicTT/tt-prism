@@ -11,9 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 #   dst_valid   math   -> pack  (Dst row valid-bit handshake)
 #   l1_data     pack   -> unpack of a *later* op (RAW through L1; e.g. c=a+b then e=d*c)
 #   issue_order program-order edge between two units on the same TRISC
+#   noc         cross-core transfer over the NoC (producer core -> consumer core)
 DependencyKind = Literal[
     "fifo", "dep", "flow",          # legacy / cosmetic
-    "src_valid", "dst_valid", "l1_data", "issue_order",  # semantic
+    "src_valid", "dst_valid", "l1_data", "issue_order", "noc",  # semantic
 ]
 
 # The four execution resources tt-prism models. THCON / sync time is folded into

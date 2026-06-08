@@ -12,8 +12,11 @@ const TILE_COLORS = ["#0f766e", "#b45309", "#b91c1c", "#4d7c0f", "#6d28d9", "#03
 
 const state = {
   data: null,        // /api/flow payload
-  op: null,          // selected op object
+  op: null,          // selected op object (single-op mode)
   step: 0,
+  mode: "op",        // "op" | "chip"
+  chip: null,        // chip payload {multicore, cores[], interactions[]}
+  noc: 0,            // current interaction index (chip mode)
   playing: false,
   timer: null,
   tokens: [],        // [{el, tile}]
@@ -23,9 +26,21 @@ async function load() {
   const r = await fetch("/api/flow");
   if (!r.ok) { document.getElementById("op-list").textContent = "Failed to load."; return; }
   state.data = await r.json();
+  state.chip = state.data.chip || { multicore: false, cores: [], interactions: [] };
   renderOpList();
   const first = state.data.ops.find((o) => !o.is_init);
   if (first) selectOp(first.id);
+}
+
+function setMode(m) {
+  stopPlay();
+  state.mode = m;
+  document.getElementById("mode-op").classList.toggle("active", m === "op");
+  document.getElementById("mode-chip").classList.toggle("active", m === "chip");
+  document.querySelector(".flow-main").hidden = m !== "op";
+  document.getElementById("chip-main").hidden = m !== "chip";
+  if (m === "chip") { buildChip(); setNoc(0); }
+  else { document.getElementById("step-info").textContent = ""; if (state.op) setStep(state.step); }
 }
 
 function renderOpList() {
@@ -188,13 +203,107 @@ function renderStepList() {
   });
 }
 
-// ---- controls ----
-function next() { if (state.op) setStep(state.step + 1 >= state.op.steps.length ? 0 : state.step + 1); }
-function prev() { if (state.op) setStep(state.step - 1 < 0 ? state.op.steps.length - 1 : state.step - 1); }
-function reset() { stopPlay(); if (state.op) setStep(0); }
+// ---- chip (multi-core) view ----
+function buildChip() {
+  const grid = document.getElementById("chip-grid");
+  grid.innerHTML = "";
+  const cores = state.chip.cores;
+  if (!cores.length) { grid.innerHTML = '<div class="muted" style="padding:20px">No cores.</div>'; return; }
+  const cols = Math.max(...cores.map((c) => c.x)) + 1;
+  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(150px, 1fr))`;
+  for (const c of cores) {
+    const card = document.createElement("div");
+    card.className = "core-card";
+    card.dataset.core = c.id;
+    card.style.gridColumn = String(c.x + 1);
+    card.style.gridRow = String(c.y + 1);
+    const ops = c.ops.map((o) =>
+      `<li class="${o.is_init ? "is-init" : ""}">${esc(o.name)}</li>`).join("");
+    card.innerHTML =
+      `<div class="core-head">${esc(c.name)}</div>` +
+      `<div class="core-pipe"><span>L1</span><span>Src</span><span>DEST</span><span>L1</span></div>` +
+      `<ul class="core-ops">${ops || '<li class="muted">—</li>'}</ul>`;
+    grid.appendChild(card);
+  }
+  // arrow overlay
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "chip-arrows");
+  svg.innerHTML =
+    '<defs><marker id="noc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" ' +
+    'orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8e24aa"/></marker></defs>' +
+    '<path id="noc-path" fill="none" stroke="#8e24aa" stroke-width="2.5" marker-end="url(#noc-arrow)"/>';
+  grid.appendChild(svg);
+  renderNocList();
+}
+
+function renderNocList() {
+  const ol = document.getElementById("noc-list");
+  ol.classList.remove("muted");
+  ol.innerHTML = "";
+  if (!state.chip.interactions.length) {
+    ol.innerHTML = '<li class="muted">No cross-core (NoC) interactions.</li>';
+    return;
+  }
+  state.chip.interactions.forEach((it, i) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="s-label">${esc(it.from_core)} → ${esc(it.to_core)}</span>` +
+      `<span class="s-expr">${esc(it.label)}</span>`;
+    li.addEventListener("click", () => { stopPlay(); setNoc(i); });
+    ol.appendChild(li);
+  });
+}
+
+function setNoc(k) {
+  const items = state.chip.interactions;
+  const grid = document.getElementById("chip-grid");
+  const cap = document.getElementById("chip-caption");
+  const path = document.getElementById("noc-path");
+  if (!items.length) {
+    cap.textContent = "Cores run independently — no cross-core interactions in this diagram.";
+    document.getElementById("step-info").textContent = "";
+    grid.querySelectorAll(".core-card").forEach((c) => c.classList.remove("dim", "send", "recv"));
+    if (path) path.removeAttribute("d");
+    return;
+  }
+  state.noc = Math.max(0, Math.min(k, items.length - 1));
+  const it = items[state.noc];
+  grid.querySelectorAll(".core-card").forEach((c) => {
+    const involved = c.dataset.core === it.from_core || c.dataset.core === it.to_core;
+    c.classList.toggle("dim", !involved);
+    c.classList.toggle("send", c.dataset.core === it.from_core);
+    c.classList.toggle("recv", c.dataset.core === it.to_core);
+  });
+  drawNocArrow(it.from_core, it.to_core);
+  cap.innerHTML = `<strong>NoC:</strong> ${esc(it.from_core)} → ${esc(it.to_core)} ` +
+    `<span class="flowarrow">${esc(it.label)}</span>`;
+  document.querySelectorAll("#noc-list li").forEach((li, i) => li.classList.toggle("current", i === state.noc));
+  document.getElementById("step-info").textContent = `NoC ${state.noc + 1} / ${items.length}`;
+}
+
+function drawNocArrow(fromId, toId) {
+  const grid = document.getElementById("chip-grid");
+  const path = document.getElementById("noc-path");
+  const a = grid.querySelector(`.core-card[data-core="${fromId}"]`);
+  const b = grid.querySelector(`.core-card[data-core="${toId}"]`);
+  if (!a || !b || !path) return;
+  const gb = grid.getBoundingClientRect();
+  const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+  const ax = ra.left - gb.left + ra.width / 2, ay = ra.top - gb.top + ra.height / 2;
+  const bx = rb.left - gb.left + rb.width / 2, by = rb.top - gb.top + rb.height / 2;
+  const mx = (ax + bx) / 2, my = (ay + by) / 2 - 28;   // slight arc
+  path.setAttribute("d", `M ${ax} ${ay} Q ${mx} ${my} ${bx} ${by}`);
+}
+
+// ---- controls (mode-aware) ----
+function len() { return state.mode === "chip" ? state.chip.interactions.length : (state.op ? state.op.steps.length : 0); }
+function cur() { return state.mode === "chip" ? state.noc : state.step; }
+function go(i) { state.mode === "chip" ? setNoc(i) : setStep(i); }
+function next() { const n = len(); if (n) go((cur() + 1) % n); }
+function prev() { const n = len(); if (n) go((cur() - 1 + n) % n); }
+function reset() { stopPlay(); if (len()) go(0); }
 function togglePlay() { state.playing ? stopPlay() : startPlay(); }
 function startPlay() {
-  if (!state.op) return;
+  if (!len()) return;
   state.playing = true;
   document.getElementById("play").textContent = "❚❚ Pause";
   state.timer = setInterval(next, 1100);
@@ -213,11 +322,16 @@ document.getElementById("next").addEventListener("click", () => { stopPlay(); ne
 document.getElementById("prev").addEventListener("click", () => { stopPlay(); prev(); });
 document.getElementById("reset").addEventListener("click", reset);
 document.getElementById("play").addEventListener("click", togglePlay);
+document.getElementById("mode-op").addEventListener("click", () => setMode("op"));
+document.getElementById("mode-chip").addEventListener("click", () => setMode("chip"));
 window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") { stopPlay(); next(); }
   else if (e.key === "ArrowLeft") { stopPlay(); prev(); }
   else if (e.key === " ") { e.preventDefault(); togglePlay(); }
 });
-window.addEventListener("resize", () => { if (state.op) positionTokens(stageAtStep(state.step)); });
+window.addEventListener("resize", () => {
+  if (state.mode === "chip") { const it = state.chip.interactions[state.noc]; if (it) drawNocArrow(it.from_core, it.to_core); }
+  else if (state.op) positionTokens(stageAtStep(state.step));
+});
 
 load();

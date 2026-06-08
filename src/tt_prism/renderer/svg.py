@@ -265,7 +265,7 @@ def _dependencies(diagram: Diagram, layout: Layout) -> Iterable[str]:
             order_src=la.order, order_tgt=lb.order,
             layout=layout,
         )
-        stroke = {"fifo": "#1976d2", "flow": "#2e7d32"}.get(dep.kind, "#444")
+        stroke = {"fifo": "#1976d2", "flow": "#2e7d32", "noc": "#8e24aa"}.get(dep.kind, "#444")
         dash = ' stroke-dasharray="4 3"' if dep.kind == "flow" else ""
         yield (
             f'<path class="dep-arrow" data-from="{escape(dep.from_)}" '

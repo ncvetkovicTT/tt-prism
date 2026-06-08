@@ -1,0 +1,52 @@
+# Chip / multi-core flow demo: three Tensix cores in a row, each running a
+# matmul, chained over the NoC: c00 → c10 → c20. Open the flow view and switch
+# to the "Chip" mode to step through the NoC interactions.
+#
+#   tt-prism serve examples/ops_chip.yaml   →   http://127.0.0.1:8765/flow  (Chip)
+
+title: "chip flow: 3 cores chained over the NoC"
+clock_ghz: 1.0
+grid_clocks: 32
+
+cores:
+  - { id: c00, x: 0, y: 0, name: "Core (0,0)" }
+  - { id: c10, x: 1, y: 0, name: "Core (1,0)" }
+  - { id: c20, x: 2, y: 0, name: "Core (2,0)" }
+
+lanes:
+  - { id: trisc0, name: "TRISC 0", order: 0 }
+  - { id: trisc1, name: "TRISC 1", order: 1 }
+  - { id: trisc2, name: "TRISC 2", order: 2 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+ops:
+  - id: a
+    name: "matmul A"
+    core_id: c00
+    blocks:
+      - { id: a_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: a_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 0 }
+      - { id: a_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+  - id: b
+    name: "matmul B"
+    core_id: c10
+    blocks:
+      - { id: b_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: b_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 0 }
+      - { id: b_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+  - id: c
+    name: "matmul C"
+    core_id: c20
+    blocks:
+      - { id: c_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 52 }
+      - { id: c_m, lane_id: trisc1, resource_id: fpu,    duration_clocks: 32, dest_bank: 0 }
+      - { id: c_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 64, dest_bank: 0 }
+
+dependencies:
+  - { from: a, to: b, kind: noc, min_gap_clocks: 40, label: "A result → B" }
+  - { from: b, to: c, kind: noc, min_gap_clocks: 40, label: "B result → C" }

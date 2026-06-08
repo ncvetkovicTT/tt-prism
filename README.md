@@ -336,8 +336,17 @@ ops:
 ```
 
 Stage vocabulary: `l1_in`, `srca`, `srcb`, `dest`, `sfpu`, `l1_out`. See
-[`examples/ops_flow_demo.yaml`](examples/ops_flow_demo.yaml). (Multi-core flow —
-cores as interacting blocks linked by NoC steps — is the next increment.)
+[`examples/ops_flow_demo.yaml`](examples/ops_flow_demo.yaml).
+
+The flow view has two modes (toggle in the toolbar):
+
+- **Single op** — the per-op dataflow described above.
+- **Chip** — the whole chip: every core as its own `[L1 · Src · DEST · L1]`
+  block (laid out by its `x, y`), running independently. Step through the
+  **NoC interactions** — derived from dependencies whose two ops live on
+  different cores (mark them `kind: noc` to colour them distinctly) — and each
+  step lights up the producer core → consumer core with a send/receive arrow.
+  See [`examples/ops_chip.yaml`](examples/ops_chip.yaml).
 
 ## Architecture
 

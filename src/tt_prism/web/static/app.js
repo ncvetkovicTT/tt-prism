@@ -277,7 +277,7 @@ function render() {
       x2 = xTgtStart; y2 = yTgtC + tgtDy;
     }
     const d = bezierPath(x1, y1, x2, y2, forward, la.order, lb.order);
-    const stroke = dep.kind === "fifo" ? "#1976d2" : dep.kind === "flow" ? "#2e7d32" : "#444";
+    const stroke = dep.kind === "fifo" ? "#1976d2" : dep.kind === "flow" ? "#2e7d32" : dep.kind === "noc" ? "#8e24aa" : "#444";
     const dash = dep.kind === "flow" ? "4 3" : "";
     const path = svgNs("path", {
       class: "dep-arrow",

@@ -9,7 +9,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
 from tt_prism import storage
-from tt_prism.flow import flow_payload
+from tt_prism.flow import chip_payload, flow_payload
 from tt_prism.models import Diagram
 from tt_prism.renderer.svg import render_svg
 from tt_prism.schedule import ScheduleError, to_render_diagram
@@ -99,7 +99,7 @@ def build_app(diagram_path: Path) -> FastAPI:
     @app.get("/api/flow")
     def get_flow() -> JSONResponse:
         d = storage.load(diagram_path)
-        return JSONResponse({"path": str(diagram_path), **flow_payload(d)})
+        return JSONResponse({"path": str(diagram_path), **flow_payload(d), "chip": chip_payload(d)})
 
     @app.get("/api/render.svg")
     def render() -> Response:

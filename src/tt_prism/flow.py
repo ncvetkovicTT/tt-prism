@@ -101,3 +101,51 @@ def flow_payload(diagram: Diagram) -> dict:
         "stage_labels": STAGE_LABELS,
         "ops": ops,
     }
+
+
+def _endpoint_op(diagram: Diagram, ref: str) -> Op | None:
+    """Resolve a dependency endpoint (op id or block id) to its Op."""
+    op = diagram.op_by_id(ref)
+    if op is not None:
+        return op
+    return diagram.op_of_block(ref)
+
+
+def chip_payload(diagram: Diagram) -> dict:
+    """Whole-chip view: each core as a [L1→Src→DEST→L1] block plus the ordered
+    cross-core (NoC) interactions derived from dependencies whose two ops live
+    on different cores. Cores are otherwise independent. Interactions keep the
+    authored order of the diagram's ``dependencies`` list."""
+    cores = diagram.effective_cores()
+    ops_by_core: dict[str, list[dict]] = {c.id: [] for c in cores}
+    for op in diagram.ops:
+        c = diagram.core_of_op(op)
+        ops_by_core.setdefault(c.id, []).append(
+            {"id": op.id, "name": op.name or op.id, "is_init": op.is_init}
+        )
+
+    interactions: list[dict] = []
+    for i, d in enumerate(diagram.dependencies):
+        fo, to = _endpoint_op(diagram, d.from_), _endpoint_op(diagram, d.to)
+        if fo is None or to is None:
+            continue
+        fc, tc = diagram.core_of_op(fo), diagram.core_of_op(to)
+        if fc.id == tc.id:
+            continue  # same core → not a NoC transfer
+        interactions.append({
+            "id": f"noc{i}",
+            "from_op": fo.id, "from_core": fc.id,
+            "to_op": to.id, "to_core": tc.id,
+            "kind": d.kind,
+            "label": d.label or f"{fo.name or fo.id} → {to.name or to.id}",
+        })
+
+    return {
+        "multicore": len(diagram.cores) > 1,
+        "cores": [
+            {"id": c.id, "x": c.x, "y": c.y, "name": c.display_name,
+             "ops": ops_by_core.get(c.id, [])}
+            for c in cores
+        ],
+        "interactions": interactions,
+    }

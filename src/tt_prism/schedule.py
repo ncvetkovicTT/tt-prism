@@ -269,7 +269,7 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
         if e.reason in ("resource", "lane", "dest_bank"):
             continue
         kind = "dep" if e.reason == "intra_op" else e.reason
-        if kind not in ("fifo", "dep", "flow", "src_valid", "dst_valid", "l1_data", "issue_order"):
+        if kind not in ("fifo", "dep", "flow", "src_valid", "dst_valid", "l1_data", "issue_order", "noc"):
             kind = "dep"
         deps.append(Dependency.model_validate({"from": e.frm, "to": e.to, "kind": kind}))
 
