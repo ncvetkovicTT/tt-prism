@@ -114,3 +114,21 @@ def test_stage_usage_invariant_holds():
         used = {s for st in o["steps"] for s in (*st["reads"], *st["writes"])}
         assert used <= set(o["stages"])                       # no orphan target stage
         assert o["stages"] == [s for s in STAGE_ORDER if s in used]   # canonical order
+
+
+def test_flow_step_data_identity():
+    # explicit data is emitted; empty data falls back to the step label
+    explicit = [
+        FlowStep(label="Unpack A", data="A", reads=["l1_in"], writes=["srca"]),
+        FlowStep(label="exp", reads=["dest"], writes=["sfpu"]),   # no data -> label
+    ]
+    d = _diagram([_op("mm", name="matmul", flow=explicit)])
+    steps = flow_payload(d)["ops"][0]["steps"]
+    assert steps[0]["data"] == "A"
+    assert steps[1]["data"] == "exp"
+
+
+def test_derived_flow_has_datum_labels():
+    d = _diagram([_op("mm", name="matmul")])      # unpack -> fpu -> pack
+    data = [s["data"] for s in flow_payload(d)["ops"][0]["steps"]]
+    assert data == ["operands", "result", "output"]

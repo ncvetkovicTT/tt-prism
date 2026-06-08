@@ -7,8 +7,7 @@
 //
 // Scheduling/derivation happens server-side (/api/flow). This file only paints.
 
-const TILE_CAP = 6;                 // max tokens drawn (tiles beyond this are summarized)
-const TILE_COLORS = ["#0f766e", "#b45309", "#b91c1c", "#4d7c0f", "#6d28d9", "#0369a1"];
+const DATUM_COLORS = ["#0f766e", "#b45309", "#b91c1c", "#4d7c0f", "#6d28d9", "#0369a1", "#9d174d", "#115e59"];
 
 const state = {
   data: null,        // /api/flow payload
@@ -16,7 +15,7 @@ const state = {
   step: 0,
   playing: false,
   timer: null,
-  tokens: [],        // [{el, tile}]
+  datums: [],        // [{name, origin, produced_at, el}] — one labeled token per datum
 };
 
 async function load() {
@@ -69,17 +68,49 @@ function renderOpTitle() {
     (op.derived ? ` <span class="tag">derived flow</span>` : "");
 }
 
-// ---- diagram: stage columns + tile tokens ----
+// ---- diagram: stage columns + per-datum labeled tokens ----
+// Each step "produces/moves" a datum (step.data). A datum that is read from L1
+// before it is produced is shown sitting in Input L1, so you see data start in
+// L1 and move through Src -> DEST -> ... as you step.
+function datumOf(st) { return st.data || st.label; }
+
+function computeDatums() {
+  const steps = state.op.steps;
+  const seen = new Map();           // name -> {name, origin, produced_at}
+  const order = [];
+  steps.forEach((st, i) => {
+    const name = datumOf(st);
+    if (!seen.has(name)) {
+      const origin = st.reads[0] || st.writes[0] || state.op.stages[0];
+      seen.set(name, { name, origin, produced_at: i });
+      order.push(name);
+    }
+  });
+  return order.map((n) => seen.get(n));
+}
+
+// Stage a datum occupies after step k: the writes (or reads) of the latest step
+// <= k that produces it; before that, its origin (typically Input L1).
+function datumStageAt(d, k) {
+  let stage = d.origin;
+  const steps = state.op.steps;
+  for (let i = 0; i <= k && i < steps.length; i++) {
+    if (datumOf(steps[i]) === d.name) {
+      stage = steps[i].writes[0] || steps[i].reads[0] || stage;
+    }
+  }
+  return stage;
+}
+
 function buildDiagram() {
   const host = document.getElementById("diagram");
   host.innerHTML = "";
-  state.tokens = [];
+  state.datums = [];
   const labels = state.data.stage_labels;
   if (!state.op.stages.length || !state.op.steps.length) {
     host.innerHTML = '<div class="muted" style="padding:20px">This op has no dataflow steps.</div>';
     return;
   }
-  // stage columns (only the stages this op uses, in canonical order)
   const cols = document.createElement("div");
   cols.className = "stage-cols";
   for (const s of state.op.stages) {
@@ -91,36 +122,19 @@ function buildDiagram() {
   }
   host.appendChild(cols);
 
-  // token layer
   const layer = document.createElement("div");
   layer.className = "token-layer";
   host.appendChild(layer);
-  const n = Math.max(1, Math.min(state.op.tiles, TILE_CAP));
-  state.tokens = [];
-  for (let i = 0; i < n; i++) {
+  state.datums = computeDatums();
+  state.datums.forEach((d, i) => {
     const el = document.createElement("div");
-    el.className = "token";
-    el.style.background = TILE_COLORS[i % TILE_COLORS.length];
-    el.textContent = `T${i}`;
+    el.className = "token datum";
+    el.style.background = DATUM_COLORS[i % DATUM_COLORS.length];
+    el.textContent = d.name;
+    el.title = d.name;
     layer.appendChild(el);
-    state.tokens.push({ el, tile: i });
-  }
-  if (state.op.tiles > TILE_CAP) {
-    const more = document.createElement("div");
-    more.className = "token more";
-    more.textContent = `+${state.op.tiles - TILE_CAP}`;
-    layer.appendChild(more);
-    state.tokens.push({ el: more, tile: -1 });
-  }
-}
-
-// The stage a token sits in after step k: the step's primary write (data just
-// landed there), else its read, else stay at the input.
-function stageAtStep(k) {
-  const steps = state.op.steps;
-  if (k < 0 || !steps.length) return state.op.stages[0];
-  const st = steps[k];
-  return (st.writes[0] || st.reads[0] || state.op.stages[0]);
+    d.el = el;
+  });
 }
 
 function setStep(k) {
@@ -132,6 +146,7 @@ function setStep(k) {
   }
   state.step = Math.max(0, Math.min(k, steps.length - 1));
   const st = steps[state.step];
+  const curDatum = datumOf(st);
 
   // highlight active stage columns (reads ∪ writes)
   const active = new Set([...st.reads, ...st.writes]);
@@ -141,39 +156,47 @@ function setStep(k) {
     c.classList.toggle("writes", st.writes.includes(c.dataset.stage));
   });
 
-  // move tokens into the current stage column
-  const stage = stageAtStep(state.step);
-  positionTokens(stage);
+  positionDatums();
+  // emphasize the datum moved this step; fade datums not yet produced
+  state.datums.forEach((d) => {
+    d.el.classList.toggle("active", d.name === curDatum);
+    d.el.classList.toggle("dimmed", state.step < d.produced_at && d.name !== curDatum);
+  });
 
-  // caption + step list + progress
   const cap = document.getElementById("step-caption");
-  const flow = st.reads.length || st.writes.length
-    ? `${(st.reads.join("+") || "—")} → ${(st.writes.join("+") || "—")}`
-    : "";
+  const flow = `${(st.reads.join("+") || "—")} → ${(st.writes.join("+") || "—")}`;
   cap.innerHTML = `<strong>${esc(st.label)}</strong>` +
-    (flow ? ` <span class="flowarrow">${esc(flow)}</span>` : "") +
+    ` <span class="datum-chip">${esc(curDatum)}</span>` +
+    ` <span class="flowarrow">${esc(flow)}</span>` +
     (st.expr ? `<div class="expr">DEST: <code>${esc(st.expr)}</code></div>` : "") +
     (st.note ? `<div class="note">${esc(st.note)}</div>` : "");
 
   document.querySelectorAll("#step-list li").forEach((li, i) =>
     li.classList.toggle("current", i === state.step));
-  document.getElementById("step-info").textContent =
-    `step ${state.step + 1} / ${steps.length}`;
+  document.getElementById("step-info").textContent = `step ${state.step + 1} / ${steps.length}`;
 }
 
-function positionTokens(stage) {
+// Place every datum token in the stage column it currently occupies, stacking
+// datums that share a column.
+function positionDatums() {
   const host = document.getElementById("diagram");
-  const col = host.querySelector(`.stage-col[data-stage="${stage}"] .stage-body`);
-  if (!col) return;
   const hb = host.getBoundingClientRect();
-  const cb = col.getBoundingClientRect();
-  const cx = cb.left - hb.left + cb.width / 2;
-  const top = cb.top - hb.top + 8;
-  state.tokens.forEach((t, i) => {
-    const w = t.el.offsetWidth || 46;
-    t.el.style.transform = `translate(${cx - w / 2}px, ${top + i * 28}px)`;
-  });
+  const perCol = {};
+  for (const d of state.datums) {
+    const stage = datumStageAt(d, state.step);
+    const col = host.querySelector(`.stage-col[data-stage="${cssEsc(stage)}"] .stage-body`);
+    if (!col) continue;
+    const cb = col.getBoundingClientRect();
+    const idx = (perCol[stage] = (perCol[stage] || 0)) ;
+    perCol[stage] += 1;
+    const w = d.el.offsetWidth || 50;
+    const cx = cb.left - hb.left + cb.width / 2;
+    const top = cb.top - hb.top + 8 + idx * 26;
+    d.el.style.transform = `translate(${cx - w / 2}px, ${top}px)`;
+  }
 }
+
+function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : s; }
 
 function renderStepList() {
   const ol = document.getElementById("step-list");
@@ -218,6 +241,6 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowLeft") { stopPlay(); prev(); }
   else if (e.key === " ") { e.preventDefault(); togglePlay(); }
 });
-window.addEventListener("resize", () => { if (state.op) positionTokens(stageAtStep(state.step)); });
+window.addEventListener("resize", () => { if (state.op && state.datums.length) positionDatums(); });
 
 load();

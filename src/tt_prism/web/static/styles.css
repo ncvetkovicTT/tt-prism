@@ -139,3 +139,11 @@ button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-all
 .step-list li:hover { background: #f1f3f5; }
 .step-list li.current { background: #d8f1e7; }
 .step-list .s-expr { display: block; color: var(--muted); font-size: 11px; }
+
+/* ---- flow datum tokens (labeled by data identity) ---- */
+.token.datum { width: auto; min-width: 34px; max-width: 120px; height: 22px; padding: 0 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
+.token.datum.active { outline: 2px solid #18221f; outline-offset: 1px; opacity: 1; z-index: 6; }
+.token.datum.dimmed { opacity: 0.28; filter: saturate(0.5); }
+.flow-caption .datum-chip { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px;
+  background: #18221f; color: #fff; font-size: 11px; font-weight: 700; }

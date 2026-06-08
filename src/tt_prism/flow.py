@@ -24,12 +24,12 @@ STAGE_LABELS: dict[str, str] = {
 }
 
 # Generic per-resource step used when an op has no explicit flow.
-_GENERIC: dict[str, tuple[list[str], list[str], str]] = {
-    # resource_id : (reads, writes, default label)
-    "unpack": (["l1_in"], ["srca", "srcb"], "unpack operands"),
-    "fpu": (["srca", "srcb"], ["dest"], "math → DEST"),
-    "sfpu": (["dest"], ["dest"], "vector (SFPU) on DEST"),
-    "pack": (["dest"], ["l1_out"], "pack → L1"),
+_GENERIC: dict[str, tuple[list[str], list[str], str, str]] = {
+    # resource_id : (reads, writes, default label, datum name)
+    "unpack": (["l1_in"], ["srca", "srcb"], "unpack operands", "operands"),
+    "fpu": (["srca", "srcb"], ["dest"], "math → DEST", "result"),
+    "sfpu": (["dest"], ["dest"], "vector (SFPU) on DEST", "result"),
+    "pack": (["dest"], ["l1_out"], "pack → L1", "output"),
 }
 
 
@@ -39,12 +39,14 @@ def resolved_flow(op: Op) -> list[FlowStep]:
         return list(op.flow)
     steps: list[FlowStep] = []
     for b in op.blocks:
-        reads, writes, default_label = _GENERIC.get(b.resource_id, ([], [], b.resource_id))
+        reads, writes, default_label, datum = _GENERIC.get(
+            b.resource_id, ([], [], b.resource_id, b.resource_id))
         steps.append(FlowStep(
             id=b.id,
             label=b.label or default_label,
             reads=list(reads),
             writes=list(writes),
+            data=datum,
         ))
     return steps
 
@@ -89,6 +91,7 @@ def flow_payload(diagram: Diagram) -> dict:
                     "label": s.label,
                     "reads": list(s.reads),
                     "writes": list(s.writes),
+                    "data": s.data or s.label,   # datum identity (token label)
                     "expr": s.expr,
                     "note": s.note,
                 }

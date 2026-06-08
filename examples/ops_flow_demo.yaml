@@ -32,15 +32,21 @@ ops:
     name: "matmul + exp"
     kind: matmul
     tiles: 4
+    # `data:` names the datum each step moves, so the flow view draws one labeled
+    # token per datum (you see A/B faces start in L1 and move through Src→DEST).
+    # Unpack is face-by-face (finer than one-tile-per-step).
     flow:
-      - { id: f1, label: "Unpack A & B",            reads: [l1_in],       writes: [srca, srcb], note: "tiles read from the CB into the source registers" }
-      - { id: f2, label: "Math: multiply-accumulate", reads: [srca, srcb], writes: [dest], expr: "DEST += A·B" }
-      - { id: f3, label: "Reuse partial via MOVD2B", reads: [dest],        writes: [srcb], note: "MOVD2B moves a DEST row back into SrcB" }
-      - { id: f4, label: "Math again",               reads: [srca, srcb], writes: [dest], expr: "DEST += A·B'" }
-      - { id: f5, label: "Load to SFPU",             reads: [dest],        writes: [sfpu] }
-      - { id: f6, label: "exp() on SFPU",            reads: [sfpu],        writes: [sfpu], expr: "LReg = exp(acc)" }
-      - { id: f7, label: "Store back to DEST",       reads: [sfpu],        writes: [dest], expr: "DEST = exp(A·B + A·B')" }
-      - { id: f8, label: "Pack to L1 (edge masks)",  reads: [dest],        writes: [l1_out], note: "PACR with edge masks set" }
+      - { id: f1, label: "Unpack A face 0", data: "A.f0", reads: [l1_in], writes: [srca], note: "UNPACR face 0 of tile A → SrcA" }
+      - { id: f2, label: "Unpack A face 1", data: "A.f1", reads: [l1_in], writes: [srca] }
+      - { id: f3, label: "Unpack B face 0", data: "B.f0", reads: [l1_in], writes: [srcb] }
+      - { id: f4, label: "Unpack B face 1", data: "B.f1", reads: [l1_in], writes: [srcb] }
+      - { id: f5, label: "Multiply-accumulate", data: "acc", reads: [srca, srcb], writes: [dest], expr: "DEST += A·B" }
+      - { id: f6, label: "Reuse partial via MOVD2B", data: "acc", reads: [dest], writes: [srcb], note: "MOVD2B moves a DEST row back into SrcB" }
+      - { id: f7, label: "Math again",          data: "acc", reads: [srca, srcb], writes: [dest], expr: "DEST += A·B'" }
+      - { id: f8, label: "Load to SFPU",        data: "acc", reads: [dest], writes: [sfpu] }
+      - { id: f9, label: "exp() on SFPU",       data: "exp", reads: [sfpu], writes: [sfpu], expr: "LReg = exp(acc)" }
+      - { id: f10, label: "Store back to DEST", data: "exp", reads: [sfpu], writes: [dest], expr: "DEST = exp(A·B + A·B')" }
+      - { id: f11, label: "Pack to L1 (edge masks)", data: "out", reads: [dest], writes: [l1_out], note: "PACR with edge masks set" }
     blocks:
       - { id: mexp_u, lane_id: trisc0, resource_id: unpack, label: "unpack A,B",  duration_clocks: 80 }
       - { id: mexp_m, lane_id: trisc1, resource_id: fpu,    label: "macc",        duration_clocks: 48, dest_bank: 0 }
