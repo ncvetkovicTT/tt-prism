@@ -145,6 +145,9 @@ button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-all
 .modeswitch .mode { border: none; border-radius: 0; background: #fff; padding: 4px 12px; cursor: pointer; font-size: 13px; }
 .modeswitch .mode.active { background: #1976d2; color: #fff; }
 
+/* `display:grid` ties with the UA [hidden]{display:none} on specificity and wins,
+   so the `hidden` attr alone wouldn't hide these panels — make hidden override. */
+.flow-main[hidden], .chip-main[hidden] { display: none; }
 .chip-main { display: grid; grid-template-columns: 1fr 300px; height: calc(100vh - 56px); }
 .chip-center { padding: 16px 20px; overflow: auto; }
 .chip-grid { position: relative; display: grid; gap: 28px; align-items: start; padding: 10px; }
@@ -178,3 +181,5 @@ button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-all
 .noc-label-bg { fill: #f3e8ff; opacity: 0.9; }
 .noc-phase { font-size: 10px; color: #6b21a8; font-weight: 700; }
 .step-list li.current .noc-phase { color: #4a1568; }
+
+.noc-clk { font-family: ui-monospace, monospace; font-size: 10px; color: #6b21a8; }
