@@ -7078,88 +7078,118 @@ dependencies:
   kind: noc
   label: input bcast
   min_gap_clocks: 60
-- from: dev2_sdpa
-  to: dev0_sdpar
+- from: dev0_sdpa
+  to: dev2_sdpar
   kind: noc
-  label: SDPA reduce (rows)
+  label: SDPA all-reduce (ring, axis 0)
+  min_gap_clocks: 60
+- from: dev2_sdpa
+  to: dev4_sdpar
+  kind: noc
+  label: SDPA all-reduce (ring, axis 0)
   min_gap_clocks: 60
 - from: dev4_sdpa
-  to: dev0_sdpar
+  to: dev6_sdpar
   kind: noc
-  label: SDPA reduce (rows)
+  label: SDPA all-reduce (ring, axis 0)
   min_gap_clocks: 60
-- from: dev6_sdpa
-  to: dev0_sdpar
+- from: dev1_sdpa
+  to: dev3_sdpar
   kind: noc
-  label: SDPA reduce (rows)
+  label: SDPA all-reduce (ring, axis 0)
   min_gap_clocks: 60
 - from: dev3_sdpa
-  to: dev1_sdpar
+  to: dev5_sdpar
   kind: noc
-  label: SDPA reduce (rows)
+  label: SDPA all-reduce (ring, axis 0)
   min_gap_clocks: 60
 - from: dev5_sdpa
-  to: dev1_sdpar
+  to: dev7_sdpar
   kind: noc
-  label: SDPA reduce (rows)
-  min_gap_clocks: 60
-- from: dev7_sdpa
-  to: dev1_sdpar
-  kind: noc
-  label: SDPA reduce (rows)
+  label: SDPA all-reduce (ring, axis 0)
   min_gap_clocks: 60
 - from: dev1_oproj
   to: dev0_oproj
   kind: noc
-  label: o_proj all-reduce (cols)
+  label: o_proj all-reduce (cols, axis 1)
   min_gap_clocks: 60
 - from: dev3_oproj
   to: dev2_oproj
   kind: noc
-  label: o_proj all-reduce (cols)
+  label: o_proj all-reduce (cols, axis 1)
   min_gap_clocks: 60
 - from: dev5_oproj
   to: dev4_oproj
   kind: noc
-  label: o_proj all-reduce (cols)
+  label: o_proj all-reduce (cols, axis 1)
   min_gap_clocks: 60
 - from: dev7_oproj
   to: dev6_oproj
   kind: noc
-  label: o_proj all-reduce (cols)
+  label: o_proj all-reduce (cols, axis 1)
+  min_gap_clocks: 60
+- from: dev0_oproj
+  to: dev2_rmsn2
+  kind: noc
+  label: AllGather (ring, axis 0)
+  min_gap_clocks: 60
+- from: dev2_oproj
+  to: dev4_rmsn2
+  kind: noc
+  label: AllGather (ring, axis 0)
+  min_gap_clocks: 60
+- from: dev4_oproj
+  to: dev6_rmsn2
+  kind: noc
+  label: AllGather (ring, axis 0)
+  min_gap_clocks: 60
+- from: dev1_oproj
+  to: dev3_rmsn2
+  kind: noc
+  label: AllGather (ring, axis 0)
+  min_gap_clocks: 60
+- from: dev3_oproj
+  to: dev5_rmsn2
+  kind: noc
+  label: AllGather (ring, axis 0)
+  min_gap_clocks: 60
+- from: dev5_oproj
+  to: dev7_rmsn2
+  kind: noc
+  label: AllGather (ring, axis 0)
   min_gap_clocks: 60
 - from: dev0_comb
-  to: dev3_comb
+  to: dev2_comb
   kind: noc
-  label: reduce-to-one -> root
+  label: reduce-to-one L1 (leaf row0->row1)
+  min_gap_clocks: 60
+- from: dev6_comb
+  to: dev4_comb
+  kind: noc
+  label: reduce-to-one L1 (leaf row3->row2)
+  min_gap_clocks: 60
+- from: dev4_comb
+  to: dev2_comb
+  kind: noc
+  label: reduce-to-one L2 (row2->row1)
   min_gap_clocks: 60
 - from: dev1_comb
   to: dev3_comb
   kind: noc
-  label: reduce-to-one -> root
+  label: reduce-to-one L1 (leaf row0->row1)
   min_gap_clocks: 60
-- from: dev2_comb
-  to: dev3_comb
+- from: dev7_comb
+  to: dev5_comb
   kind: noc
-  label: reduce-to-one -> root
-  min_gap_clocks: 60
-- from: dev4_comb
-  to: dev3_comb
-  kind: noc
-  label: reduce-to-one -> root
+  label: reduce-to-one L1 (leaf row3->row2)
   min_gap_clocks: 60
 - from: dev5_comb
   to: dev3_comb
   kind: noc
-  label: reduce-to-one -> root
+  label: reduce-to-one L2 (row2->row1)
   min_gap_clocks: 60
-- from: dev6_comb
+- from: dev2_comb
   to: dev3_comb
   kind: noc
-  label: reduce-to-one -> root
-  min_gap_clocks: 60
-- from: dev7_comb
-  to: dev3_comb
-  kind: noc
-  label: reduce-to-one -> root
+  label: reduce-to-one L3 (col0->root)
   min_gap_clocks: 60

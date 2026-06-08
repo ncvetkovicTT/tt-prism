@@ -108,25 +108,36 @@ def D(frm, to, label, gap=60):
     deps.append(Dependency.model_validate(
         {"from": frm, "to": to, "kind": "noc", "min_gap_clocks": gap, "label": label}))
 
-# 1. input broadcast: sender -> every other chip's rmsnorm_in
+# Collective topologies verified against tt-metal aho/sdpa-ops:
+#  - sdpa_reduce_to_all: ring all-reduce over axis 0 (rows)         (sdpa_reduce_to_all/op.py)
+#  - o_proj all-reduce:  over axis 1 (cols)                          (attention_block/op.py:1035)
+#  - AllGather:          ring over axis 0 (rows) after the all-reduce (attention_block/op.py:1055)
+#  - reduce_to_one:      3-level tree to root (1,1)                   (reduce_to_one_b1/op.py:9)
+# Rings are modeled as forward chains (acyclic) rather than closed cycles.
+
+# 1. input broadcast: sender -> every other chip's rmsnorm_in (neighbor-exchange)
 s = cid(*SENDER)
 for row in range(MESH_ROWS):
     for col in range(MESH_COLS):
         if (row, col) != SENDER:
             D(f"{s}_rmsn1", f"{cid(row,col)}_rmsn1", "input bcast")
-# 2. SDPA reduce across rows (axis 0): rows 1-3 -> row 0, per column
+# 2. SDPA all-reduce: ring across the 4 rows per column (axis 0); result on all rows
 for col in range(MESH_COLS):
-    for row in range(1, MESH_ROWS):
-        D(f"{cid(row,col)}_sdpa", f"{cid(0,col)}_sdpar", "SDPA reduce (rows)")
-# 3. o_proj all-reduce across cols (axis 1): col1 -> col0 per row
+    for row in range(MESH_ROWS - 1):
+        D(f"{cid(row,col)}_sdpa", f"{cid(row+1,col)}_sdpar", "SDPA all-reduce (ring, axis 0)")
+# 3. o_proj all-reduce across cols (axis 1)
 for row in range(MESH_ROWS):
-    D(f"{cid(row,1)}_oproj", f"{cid(row,0)}_oproj", "o_proj all-reduce (cols)")
-# 4. reduce-to-one: every chip -> root
-r = cid(*ROOT)
-for row in range(MESH_ROWS):
-    for col in range(MESH_COLS):
-        if (row, col) != ROOT:
-            D(f"{cid(row,col)}_comb", f"{r}_comb", "reduce-to-one -> root")
+    D(f"{cid(row,1)}_oproj", f"{cid(row,0)}_oproj", "o_proj all-reduce (cols, axis 1)")
+# 4. AllGather of the SP-sharded output across the 4 rows (axis 0), after o_proj -> feeds MLP
+for col in range(MESH_COLS):
+    for row in range(MESH_ROWS - 1):
+        D(f"{cid(row,col)}_oproj", f"{cid(row+1,col)}_rmsn2", "AllGather (ring, axis 0)")
+# 5. reduce-to-one: 3-level tree to root (1,1)=dev3
+for col in range(MESH_COLS):
+    D(f"{cid(0,col)}_comb", f"{cid(1,col)}_comb", "reduce-to-one L1 (leaf row0->row1)")
+    D(f"{cid(3,col)}_comb", f"{cid(2,col)}_comb", "reduce-to-one L1 (leaf row3->row2)")
+    D(f"{cid(2,col)}_comb", f"{cid(1,col)}_comb", "reduce-to-one L2 (row2->row1)")
+D(f"{cid(1,0)}_comb", f"{cid(1,1)}_comb", "reduce-to-one L3 (col0->root)")
 
 diagram = Diagram(
     title="DeepSeek-V3 decoder (test_decoder_mlp) — 8-chip Blackhole 4x2 mesh",

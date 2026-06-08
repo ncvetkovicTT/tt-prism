@@ -73,19 +73,20 @@ tt-prism serve examples/deepseek/decoder_mlp_device8.yaml   # /flow → "Chip": 
 ## What the decoder does (op-DAG, per chip)
 
 **Phase A — MLA attention** (`fused_ops/attention_block`):
-`rmsnorm_in → q_proj → kv_a/b_proj → rope+kv_cache → flash_mla SDPA →
-sdpa_reduce_to_all → post_sdpa (kv_b2 + o_proj)`.
+`rmsnorm_in → q_proj (incl. q_norm rmsnorm2, folded) → kv_a/b_proj → rope+kv_cache →
+flash_mla SDPA → sdpa_reduce_to_all → post_sdpa (kv_b2 + o_proj)`.
 
 **Phase B — dense MLP** (`fused_ops/moe`, routing off):
 `rmsnorm_mlp → gate_up_proj+silu → down_proj + shared_expert → combine`.
 
-**The 4 cross-chip collectives (fabric / NoC):**
-| Phase | Collective | Axis | Modeled as |
+**The 5 cross-chip collectives (fabric / NoC)** — topology verified against the source:
+| Phase | Collective | Axis / topology | Modeled as |
 |---|---|---|---|
-| start | input **broadcast** | sender chip (1,0)=dev2 → all 8 | 7 noc edges into `rmsnorm_in` |
-| attn | **SDPA reduce** | across the 4 rows (seq-parallel, axis 0) | 6 noc edges into `sdpa_reduce` |
-| attn | o_proj **all-reduce** | across the 2 cols (tensor-parallel, axis 1) | 4 noc edges into `o_proj` |
-| end | **reduce-to-one** | tree to root chip (1,1)=dev3 | 7 noc edges into `combine` |
+| start | input **broadcast** | sender (1,0)=dev2 → all (neighbor-exchange) | 7 noc edges into `rmsnorm_in` |
+| attn | **SDPA all-reduce** | rows (axis 0), **ring** — result on all rows | ring chain into `sdpa_reduce` |
+| attn | o_proj **all-reduce** | cols (axis 1, tensor-parallel) | edges into `o_proj` |
+| attn | **AllGather** | rows (axis 0), after the all-reduce — gathers the SP-sharded output | ring chain into `rmsnorm_mlp` |
+| end | **reduce-to-one** | **3-level tree** to root (1,1)=dev3 (rows within a column, then cross-column) | tree edges into `combine` |
 
 Mesh layout (x=col, y=row; device idx = row·2+col): chip2=(1,0) is the input
 **sender**, chip3=(1,1) is the reduce **root** where the test reads the result.
