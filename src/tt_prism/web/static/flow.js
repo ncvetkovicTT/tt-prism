@@ -43,10 +43,25 @@ function setMode(m) {
   state.mode = m;
   document.getElementById("mode-op").classList.toggle("active", m === "op");
   document.getElementById("mode-chip").classList.toggle("active", m === "chip");
+  // Unhide the target section *first* so the next rebuild measures real,
+  // non-zero element rects (positionDatums / drawNocArrow read bounding boxes,
+  // which are all zero while a section is hidden).
   document.querySelector(".flow-main").hidden = m !== "op";
   document.getElementById("chip-main").hidden = m !== "chip";
-  if (m === "chip") { buildChip(); setNoc(state.noc); }
-  else { document.getElementById("step-info").textContent = ""; if (state.op) setStep(state.step); }
+  if (m === "chip") {
+    buildChip();
+    setNoc(state.noc);
+  } else {
+    // Returning to single-op: fully rebuild the diagram for the selected op and
+    // re-run setStep, so tokens/columns are recreated and repositioned against
+    // the now-visible layout (the diagram was last laid out while hidden).
+    document.getElementById("step-info").textContent = "";
+    if (state.op) {
+      buildDiagram();
+      renderStepList();
+      setStep(state.step);
+    }
+  }
 }
 
 function renderOpList() {
