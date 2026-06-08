@@ -87,3 +87,10 @@ ops:
       - { id: add_u, lane_id: trisc0, resource_id: unpack, duration_clocks: 10 }
       - { id: add_f, lane_id: trisc1, resource_id: fpu,    duration_clocks: 24, dest_bank: 0 }
       - { id: add_p, lane_id: trisc2, resource_id: pack,   duration_clocks: 16, dest_bank: 0 }
+
+dependencies:
+  # The compute phases are sequentially data-dependent (each consumes the
+  # previous), so the schedule shows per-op unpack→math→pack rather than all
+  # unpacks then all maths. (Movement ops carry no blocks, so chain compute↔compute.)
+  - { from: rms, to: mm, kind: l1_data }
+  - { from: mm, to: addout, kind: l1_data }

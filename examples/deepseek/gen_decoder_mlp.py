@@ -275,10 +275,23 @@ wops = [
     phase("comb", "combine", "eltwise", [(U, "trisc0", 8), (F, "trisc1", 40), (P, "trisc2", 16)]),
     move("r2o", "reduce-to-one (tree → root)", "reduce-to-one", r2o_legs),
 ]
+# The phases are sequentially data-dependent (each consumes the previous), so
+# chain the COMPUTE ops with l1_data. Without this the scheduler treats them as
+# independent and pipelines them by engine (all unpacks, then all maths, then
+# all packs) instead of per-op unpack→math→pack. Movement ops have no blocks,
+# so they're skipped in the chain.
+wdeps = []
+_prev = None
+for o in wops:
+    if o.is_movement:
+        continue
+    if _prev is not None:
+        wdeps.append(Dependency.model_validate({"from": _prev.id, "to": o.id, "kind": "l1_data"}))
+    _prev = o
 wdiagram = Diagram(
     title="DeepSeek-V3 decoder walkthrough — 8-chip mesh (compute + NoC, in order)",
     clock_ghz=1.0, grid_clocks=64, dest_banks=2,
-    cores=cores, lanes=LANES, resources=RES, ops=wops,
+    cores=cores, lanes=LANES, resources=RES, ops=wops, dependencies=wdeps,
 )
 out3 = Path(__file__).with_name("decoder_walkthrough.yaml")
 storage.dump(wdiagram, out3)

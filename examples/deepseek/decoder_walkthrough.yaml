@@ -1086,4 +1086,49 @@ ops:
   category: null
   flow: []
   blocks: []
-dependencies: []
+dependencies:
+- from: w_rmsn1
+  to: w_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_qproj
+  to: w_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_kvproj
+  to: w_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_rope
+  to: w_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_sdpa
+  to: w_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_oproj
+  to: w_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_rmsn2
+  to: w_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_gateup
+  to: w_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: w_down
+  to: w_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
