@@ -1,0 +1,114 @@
+# compute_sdpa_chunk — DeepSeek-V3 flash-attention chunk (tt-metal aho/sdpa-ops)
+# Source: models/demos/deepseek_v3_b1/kernel_includes/.../compute_kernel_api/sdpa.h:250
+#         driven by micro_ops/sdpa/kernels/sdpa_compute.cpp (loop over chunks)
+#
+# Flash online-softmax over K/V chunks. Accumulators (running max, running sum,
+# output mm2) live in DEST for the whole op (one tile_regs_acquire) — there is no
+# per-chunk L1 round-trip. Each chunk is a tight FPU<->SFPU ping-pong gated by two
+# 0/1 semaphores (FPU_SFPU / SFPU_FPU), so the timeline is largely serial.
+#
+# Thread/engine mapping as written in the kernel:
+#   TRISC0 = UNPACK,  TRISC1 = FPU (MATH(...)),  TRISC2 = SFPU *and* PACK (PACK(...))
+# So SFPU vector ops (reduce-max/sum, exp, correction) are dispatched by the same
+# thread that later packs — modeled on the trisc2 lane.
+#
+# Durations are proportional estimates (QK ~ C*K, PV ~ K*V, exp ~ C, reduce ~ C);
+# example dims chunk_size=C=4, num_tiles_k=K=4, num_tiles_v=V=4.
+#
+#   tt-prism serve examples/deepseek/sdpa_chunk.yaml   # /flow → "Single op" = the dataflow
+#   tt-prism schedule examples/deepseek/sdpa_chunk.yaml
+
+title: "compute_sdpa_chunk — flash attention (3 chunks + normalize)"
+clock_ghz: 1.0
+grid_clocks: 64
+dest_banks: 1            # accumulators held in one DEST bank across all chunks
+
+lanes:
+  - { id: trisc0, name: "TRISC0 / UNPACK", order: 0 }
+  - { id: trisc1, name: "TRISC1 / FPU",    order: 1 }
+  - { id: trisc2, name: "TRISC2 / SFPU+PACK", order: 2 }
+
+resources:
+  - { id: unpack, name: "UNPACK", color: "#ef9a9a" }
+  - { id: fpu,    name: "FPU",    color: "#a5d6a7" }
+  - { id: sfpu,   name: "SFPU",   color: "#90caf9" }
+  - { id: pack,   name: "PACK",   color: "#ffcc80" }
+
+ops:
+  # ---- chunk 0 (first_chunk: no correction, reduce ops initialize) ----
+  - id: c0
+    name: "sdpa_chunk[0] (first)"
+    kind: flash_attention_chunk
+    tiles: 4
+    flow:
+      - { id: s1, label: "Unpack Q,K",        reads: [l1_in],      writes: [srca, srcb], note: "cb_q->SrcB, cb_k->SrcA (transpose_k)" }
+      - { id: s2, label: "QK^T matmul (FPU)", reads: [srca, srcb], writes: [dest], expr: "dest[mm1] = Q @ K^T (scores)" }
+      - { id: s3, label: "Reduce-max (SFPU)", reads: [dest],       writes: [dest], expr: "dest[max] = rowmax(mm1)" }
+      - { id: s4, label: "Bcast-sub (FPU)",   reads: [dest],       writes: [srca, srcb, dest], expr: "dest[mm1] = mm1 - bcast(max)" }
+      - { id: s5, label: "Exp scores (SFPU)", reads: [dest],       writes: [dest], expr: "dest[mm1] = exp(mm1)  (per-tile, FPU<->SFPU sem)" }
+      - { id: s6, label: "Unpack V",          reads: [l1_in],      writes: [srca] }
+      - { id: s7, label: "PV matmul (FPU)",   reads: [srca, dest], writes: [dest], expr: "dest[mm2] += probs(mm1 via MOVD2B) @ V" }
+      - { id: s8, label: "Reduce-sum (SFPU)", reads: [dest],       writes: [dest], expr: "dest[sum] = rowsum(mm1)" }
+    blocks:
+      - { id: c0_qku, lane_id: trisc0, resource_id: unpack, label: "unpack Q,K", duration_clocks: 12, dest_bank: 0 }
+      - { id: c0_qk,  lane_id: trisc1, resource_id: fpu,    label: "QK^T",       duration_clocks: 52, dest_bank: 0 }
+      - { id: c0_rmx, lane_id: trisc2, resource_id: sfpu,   label: "reduce max", duration_clocks: 4,  dest_bank: 0 }
+      - { id: c0_sub, lane_id: trisc1, resource_id: fpu,    label: "bcast sub",  duration_clocks: 4,  dest_bank: 0 }
+      - { id: c0_exp, lane_id: trisc2, resource_id: sfpu,   label: "exp",        duration_clocks: 8,  dest_bank: 0 }
+      - { id: c0_pvu, lane_id: trisc0, resource_id: unpack, label: "unpack V",   duration_clocks: 12, dest_bank: 0 }
+      - { id: c0_pv,  lane_id: trisc1, resource_id: fpu,    label: "PV matmul",  duration_clocks: 64, dest_bank: 0 }
+      - { id: c0_rsm, lane_id: trisc2, resource_id: sfpu,   label: "reduce sum", duration_clocks: 4,  dest_bank: 0 }
+
+  # ---- chunk 1 (mid: online-softmax correction of running sum + output) ----
+  - id: c1
+    name: "sdpa_chunk[1] (correction)"
+    kind: flash_attention_chunk
+    tiles: 4
+    blocks:
+      - { id: c1_qku, lane_id: trisc0, resource_id: unpack, label: "unpack Q,K", duration_clocks: 12, dest_bank: 0 }
+      - { id: c1_qk,  lane_id: trisc1, resource_id: fpu,    label: "QK^T",       duration_clocks: 52, dest_bank: 0 }
+      - { id: c1_rmx, lane_id: trisc2, resource_id: sfpu,   label: "reduce max", duration_clocks: 4,  dest_bank: 0 }
+      - { id: c1_sub, lane_id: trisc1, resource_id: fpu,    label: "bcast sub",  duration_clocks: 4,  dest_bank: 0 }
+      - { id: c1_ecr, lane_id: trisc2, resource_id: sfpu,   label: "exp-corr",   duration_clocks: 2,  dest_bank: 0 }
+      - { id: c1_mcr, lane_id: trisc1, resource_id: fpu,    label: "mul-corr mm2", duration_clocks: 4, dest_bank: 0 }
+      - { id: c1_exp, lane_id: trisc2, resource_id: sfpu,   label: "exp",        duration_clocks: 8,  dest_bank: 0 }
+      - { id: c1_pvu, lane_id: trisc0, resource_id: unpack, label: "unpack V",   duration_clocks: 12, dest_bank: 0 }
+      - { id: c1_pv,  lane_id: trisc1, resource_id: fpu,    label: "PV matmul",  duration_clocks: 64, dest_bank: 0 }
+      - { id: c1_rsm, lane_id: trisc2, resource_id: sfpu,   label: "reduce sum", duration_clocks: 4,  dest_bank: 0 }
+
+  # ---- chunk 2 (last: correction + signal packer to drain output) ----
+  - id: c2
+    name: "sdpa_chunk[2] (last)"
+    kind: flash_attention_chunk
+    tiles: 4
+    blocks:
+      - { id: c2_qku, lane_id: trisc0, resource_id: unpack, label: "unpack Q,K", duration_clocks: 12, dest_bank: 0 }
+      - { id: c2_qk,  lane_id: trisc1, resource_id: fpu,    label: "QK^T",       duration_clocks: 52, dest_bank: 0 }
+      - { id: c2_rmx, lane_id: trisc2, resource_id: sfpu,   label: "reduce max", duration_clocks: 4,  dest_bank: 0 }
+      - { id: c2_sub, lane_id: trisc1, resource_id: fpu,    label: "bcast sub",  duration_clocks: 4,  dest_bank: 0 }
+      - { id: c2_ecr, lane_id: trisc2, resource_id: sfpu,   label: "exp-corr",   duration_clocks: 2,  dest_bank: 0 }
+      - { id: c2_mcr, lane_id: trisc1, resource_id: fpu,    label: "mul-corr mm2", duration_clocks: 4, dest_bank: 0 }
+      - { id: c2_exp, lane_id: trisc2, resource_id: sfpu,   label: "exp",        duration_clocks: 8,  dest_bank: 0 }
+      - { id: c2_pvu, lane_id: trisc0, resource_id: unpack, label: "unpack V",   duration_clocks: 12, dest_bank: 0 }
+      - { id: c2_pv,  lane_id: trisc1, resource_id: fpu,    label: "PV matmul",  duration_clocks: 64, dest_bank: 0 }
+      - { id: c2_rsm, lane_id: trisc2, resource_id: sfpu,   label: "reduce sum", duration_clocks: 4,  dest_bank: 0 }
+
+  # ---- normalize (compute_sdpa_recip) + pack the output to L1 ----
+  - id: rcp
+    name: "sdpa_recip + pack"
+    kind: flash_attention_normalize
+    tiles: 4
+    flow:
+      - { id: r1, label: "recip(sum) (SFPU)", reads: [dest],       writes: [dest], expr: "dest[recip] = 1/sum" }
+      - { id: r2, label: "Bcast-mul (FPU)",   reads: [dest],       writes: [srca, srcb, dest], expr: "dest[mm2] = mm2 * recip" }
+      - { id: r3, label: "Pack out (PACK)",   reads: [dest],       writes: [l1_out], expr: "cb_out = mm2 (normalized attention output)" }
+    blocks:
+      - { id: rcp_s, lane_id: trisc2, resource_id: sfpu, label: "recip sum",  duration_clocks: 6, dest_bank: 0 }
+      - { id: rcp_m, lane_id: trisc1, resource_id: fpu,  label: "mul recip",  duration_clocks: 4, dest_bank: 0 }
+      - { id: rcp_p, lane_id: trisc2, resource_id: pack, label: "pack out",   duration_clocks: 4, dest_bank: 0 }
+
+dependencies:
+  # chunks carry the running max/sum/output accumulator forward (in DEST)
+  - { from: c0, to: c1, kind: l1_data, label: "running max/sum/mm2" }
+  - { from: c1, to: c2, kind: l1_data, label: "running max/sum/mm2" }
+  - { from: c2, to: rcp, kind: l1_data, label: "final acc -> normalize" }

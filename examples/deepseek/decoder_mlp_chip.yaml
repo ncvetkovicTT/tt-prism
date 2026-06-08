@@ -1,0 +1,4053 @@
+title: "DeepSeek-V3 decoder (test_decoder_mlp) \u2014 8-chip Blackhole 4x2 mesh"
+clock_ghz: 1.0
+grid_clocks: 128
+dest_banks: 2
+cores:
+- id: dev0
+  x: 0
+  y: 0
+  name: chip0 (0,0)
+- id: dev1
+  x: 1
+  y: 0
+  name: chip1 (0,1)
+- id: dev2
+  x: 0
+  y: 1
+  name: chip2 (1,0) [sender]
+- id: dev3
+  x: 1
+  y: 1
+  name: chip3 (1,1) [root]
+- id: dev4
+  x: 0
+  y: 2
+  name: chip4 (2,0)
+- id: dev5
+  x: 1
+  y: 2
+  name: chip5 (2,1)
+- id: dev6
+  x: 0
+  y: 3
+  name: chip6 (3,0)
+- id: dev7
+  x: 1
+  y: 3
+  name: chip7 (3,1)
+lanes:
+- id: trisc0
+  name: TRISC0/UNPACK
+  order: 0
+  group: null
+  group_label: ''
+- id: trisc1
+  name: TRISC1/FPU
+  order: 1
+  group: null
+  group_label: ''
+- id: trisc2
+  name: TRISC2/SFPU+PACK
+  order: 2
+  group: null
+  group_label: ''
+resources:
+- id: unpack
+  name: UNPACK
+  color: '#ef9a9a'
+- id: fpu
+  name: FPU
+  color: '#a5d6a7'
+- id: sfpu
+  name: SFPU
+  color: '#90caf9'
+- id: pack
+  name: PACK
+  color: '#ffcc80'
+work_items: []
+ops:
+- id: dev0_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev0_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev0_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev0_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev0_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev0_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev0_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev0_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev0_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev0_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev0_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev0_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev0_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev0_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev0_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev0_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev0_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev0_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev0_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev0_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev0_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev0_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev0_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev0_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev0_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev0_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev0_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev0_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev0_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev0_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev0_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev0_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev0_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev0_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev0_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev0_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev0_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev0_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev0
+  category: null
+  flow: []
+  blocks:
+  - id: dev0_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev0_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev0_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev1_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev1_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev1_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev1_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev1_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev1_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev1_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev1_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev1_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev1_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev1_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev1_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev1_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev1_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev1_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev1_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev1_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev1_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev1_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev1_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev1_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev1_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev1_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev1_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev1_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev1_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev1_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev1_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev1_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev1_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev1_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev1_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev1_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev1_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev1_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev1_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev1_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev1_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev1
+  category: null
+  flow: []
+  blocks:
+  - id: dev1_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev1_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev1_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev2_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev2_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev2_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev2_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev2_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev2_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev2_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev2_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev2_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev2_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev2_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev2_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev2_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev2_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev2_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev2_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev2_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev2_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev2_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev2_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev2_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev2_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev2_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev2_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev2_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev2_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev2_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev2_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev2_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev2_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev2_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev2_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev2_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev2_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev2_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev2_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev2_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev2_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev2
+  category: null
+  flow: []
+  blocks:
+  - id: dev2_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev2_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev2_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev3_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev3_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev3_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev3_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev3_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev3_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev3_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev3_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev3_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev3_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev3_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev3_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev3_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev3_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev3_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev3_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev3_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev3_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev3_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev3_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev3_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev3_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev3_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev3_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev3_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev3_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev3_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev3_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev3_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev3_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev3_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev3_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev3_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev3_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev3_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev3_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev3_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev3_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev3
+  category: null
+  flow: []
+  blocks:
+  - id: dev3_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev3_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev3_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev4_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev4_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev4_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev4_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev4_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev4_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev4_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev4_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev4_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev4_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev4_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev4_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev4_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev4_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev4_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev4_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev4_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev4_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev4_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev4_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev4_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev4_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev4_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev4_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev4_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev4_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev4_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev4_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev4_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev4_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev4_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev4_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev4_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev4_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev4_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev4_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev4_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev4_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev4
+  category: null
+  flow: []
+  blocks:
+  - id: dev4_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev4_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev4_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev5_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev5_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev5_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev5_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev5_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev5_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev5_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev5_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev5_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev5_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev5_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev5_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev5_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev5_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev5_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev5_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev5_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev5_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev5_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev5_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev5_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev5_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev5_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev5_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev5_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev5_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev5_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev5_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev5_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev5_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev5_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev5_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev5_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev5_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev5_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev5_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev5_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev5_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev5
+  category: null
+  flow: []
+  blocks:
+  - id: dev5_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev5_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev5_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev6_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev6_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev6_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev6_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev6_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev6_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev6_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev6_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev6_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev6_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev6_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev6_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev6_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev6_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev6_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev6_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev6_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev6_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev6_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev6_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev6_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev6_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev6_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev6_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev6_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev6_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev6_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev6_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev6_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev6_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev6_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev6_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev6_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev6_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev6_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev6_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev6_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev6_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev6
+  category: null
+  flow: []
+  blocks:
+  - id: dev6_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev6_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev6_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev7_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev7_rmsn1
+  name: rmsnorm_in
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_rmsn1_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev7_rmsn1_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev7_rmsn1_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev7_rmsn1_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev7_qproj
+  name: q_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_qproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev7_qproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: dev7_qproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev7_kvproj
+  name: kv_a/b_proj (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_kvproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev7_kvproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev7_kvproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev7_rope
+  name: rope + kv_cache
+  kind: rope
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_rope_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev7_rope_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+  - id: dev7_rope_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev7_rope_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+- id: dev7_sdpa
+  name: flash_mla SDPA
+  kind: flash_attention
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    expr: ''
+    note: ''
+  blocks:
+  - id: dev7_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev7_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 300
+    dest_bank: null
+    tags: []
+  - id: dev7_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 120
+    dest_bank: null
+    tags: []
+  - id: dev7_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+- id: dev7_sdpar
+  name: sdpa_reduce_to_all
+  kind: reduce
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_sdpar_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev7_sdpar_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: dev7_oproj
+  name: post_sdpa kv_b2+o_proj
+  kind: matmul
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_oproj_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: dev7_oproj_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev7_oproj_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev7_rmsn2
+  name: rmsnorm_mlp
+  kind: rmsnorm
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_rmsn2_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev7_rmsn2_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev7_rmsn2_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: dev7_rmsn2_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: dev7_gateup
+  name: gate_up_proj + silu
+  kind: matmul
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_gateup_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev7_gateup_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: dev7_gateup_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev7_gateup_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: dev7_down
+  name: down_proj + shared_expert
+  kind: matmul
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_down_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+  - id: dev7_down_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 260
+    dest_bank: null
+    tags: []
+  - id: dev7_down_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: dev7_down_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 28
+    dest_bank: null
+    tags: []
+- id: dev7_comb
+  name: combine + reduce_to_one
+  kind: eltwise
+  tiles: 4
+  core_id: dev7
+  category: null
+  flow: []
+  blocks:
+  - id: dev7_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: dev7_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: dev7_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+dependencies:
+- from: dev0_init
+  to: dev0_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_rmsn1
+  to: dev0_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_qproj
+  to: dev0_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_kvproj
+  to: dev0_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_rope
+  to: dev0_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_sdpa
+  to: dev0_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_sdpar
+  to: dev0_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_oproj
+  to: dev0_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_rmsn2
+  to: dev0_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_gateup
+  to: dev0_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev0_down
+  to: dev0_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_init
+  to: dev1_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_rmsn1
+  to: dev1_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_qproj
+  to: dev1_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_kvproj
+  to: dev1_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_rope
+  to: dev1_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_sdpa
+  to: dev1_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_sdpar
+  to: dev1_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_oproj
+  to: dev1_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_rmsn2
+  to: dev1_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_gateup
+  to: dev1_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev1_down
+  to: dev1_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_init
+  to: dev2_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_rmsn1
+  to: dev2_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_qproj
+  to: dev2_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_kvproj
+  to: dev2_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_rope
+  to: dev2_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_sdpa
+  to: dev2_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_sdpar
+  to: dev2_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_oproj
+  to: dev2_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_rmsn2
+  to: dev2_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_gateup
+  to: dev2_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_down
+  to: dev2_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_init
+  to: dev3_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_rmsn1
+  to: dev3_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_qproj
+  to: dev3_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_kvproj
+  to: dev3_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_rope
+  to: dev3_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_sdpa
+  to: dev3_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_sdpar
+  to: dev3_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_oproj
+  to: dev3_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_rmsn2
+  to: dev3_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_gateup
+  to: dev3_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev3_down
+  to: dev3_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_init
+  to: dev4_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_rmsn1
+  to: dev4_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_qproj
+  to: dev4_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_kvproj
+  to: dev4_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_rope
+  to: dev4_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_sdpa
+  to: dev4_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_sdpar
+  to: dev4_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_oproj
+  to: dev4_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_rmsn2
+  to: dev4_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_gateup
+  to: dev4_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev4_down
+  to: dev4_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_init
+  to: dev5_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_rmsn1
+  to: dev5_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_qproj
+  to: dev5_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_kvproj
+  to: dev5_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_rope
+  to: dev5_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_sdpa
+  to: dev5_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_sdpar
+  to: dev5_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_oproj
+  to: dev5_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_rmsn2
+  to: dev5_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_gateup
+  to: dev5_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev5_down
+  to: dev5_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_init
+  to: dev6_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_rmsn1
+  to: dev6_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_qproj
+  to: dev6_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_kvproj
+  to: dev6_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_rope
+  to: dev6_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_sdpa
+  to: dev6_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_sdpar
+  to: dev6_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_oproj
+  to: dev6_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_rmsn2
+  to: dev6_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_gateup
+  to: dev6_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev6_down
+  to: dev6_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_init
+  to: dev7_rmsn1
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_rmsn1
+  to: dev7_qproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_qproj
+  to: dev7_kvproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_kvproj
+  to: dev7_rope
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_rope
+  to: dev7_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_sdpa
+  to: dev7_sdpar
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_sdpar
+  to: dev7_oproj
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_oproj
+  to: dev7_rmsn2
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_rmsn2
+  to: dev7_gateup
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_gateup
+  to: dev7_down
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev7_down
+  to: dev7_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: dev2_rmsn1
+  to: dev0_rmsn1
+  kind: noc
+  label: input bcast
+  min_gap_clocks: 60
+- from: dev2_rmsn1
+  to: dev1_rmsn1
+  kind: noc
+  label: input bcast
+  min_gap_clocks: 60
+- from: dev2_rmsn1
+  to: dev3_rmsn1
+  kind: noc
+  label: input bcast
+  min_gap_clocks: 60
+- from: dev2_rmsn1
+  to: dev4_rmsn1
+  kind: noc
+  label: input bcast
+  min_gap_clocks: 60
+- from: dev2_rmsn1
+  to: dev5_rmsn1
+  kind: noc
+  label: input bcast
+  min_gap_clocks: 60
+- from: dev2_rmsn1
+  to: dev6_rmsn1
+  kind: noc
+  label: input bcast
+  min_gap_clocks: 60
+- from: dev2_rmsn1
+  to: dev7_rmsn1
+  kind: noc
+  label: input bcast
+  min_gap_clocks: 60
+- from: dev2_sdpa
+  to: dev0_sdpar
+  kind: noc
+  label: SDPA reduce (rows)
+  min_gap_clocks: 60
+- from: dev4_sdpa
+  to: dev0_sdpar
+  kind: noc
+  label: SDPA reduce (rows)
+  min_gap_clocks: 60
+- from: dev6_sdpa
+  to: dev0_sdpar
+  kind: noc
+  label: SDPA reduce (rows)
+  min_gap_clocks: 60
+- from: dev3_sdpa
+  to: dev1_sdpar
+  kind: noc
+  label: SDPA reduce (rows)
+  min_gap_clocks: 60
+- from: dev5_sdpa
+  to: dev1_sdpar
+  kind: noc
+  label: SDPA reduce (rows)
+  min_gap_clocks: 60
+- from: dev7_sdpa
+  to: dev1_sdpar
+  kind: noc
+  label: SDPA reduce (rows)
+  min_gap_clocks: 60
+- from: dev1_oproj
+  to: dev0_oproj
+  kind: noc
+  label: o_proj all-reduce (cols)
+  min_gap_clocks: 60
+- from: dev3_oproj
+  to: dev2_oproj
+  kind: noc
+  label: o_proj all-reduce (cols)
+  min_gap_clocks: 60
+- from: dev5_oproj
+  to: dev4_oproj
+  kind: noc
+  label: o_proj all-reduce (cols)
+  min_gap_clocks: 60
+- from: dev7_oproj
+  to: dev6_oproj
+  kind: noc
+  label: o_proj all-reduce (cols)
+  min_gap_clocks: 60
+- from: dev0_comb
+  to: dev3_comb
+  kind: noc
+  label: reduce-to-one -> root
+  min_gap_clocks: 60
+- from: dev1_comb
+  to: dev3_comb
+  kind: noc
+  label: reduce-to-one -> root
+  min_gap_clocks: 60
+- from: dev2_comb
+  to: dev3_comb
+  kind: noc
+  label: reduce-to-one -> root
+  min_gap_clocks: 60
+- from: dev4_comb
+  to: dev3_comb
+  kind: noc
+  label: reduce-to-one -> root
+  min_gap_clocks: 60
+- from: dev5_comb
+  to: dev3_comb
+  kind: noc
+  label: reduce-to-one -> root
+  min_gap_clocks: 60
+- from: dev6_comb
+  to: dev3_comb
+  kind: noc
+  label: reduce-to-one -> root
+  min_gap_clocks: 60
+- from: dev7_comb
+  to: dev3_comb
+  kind: noc
+  label: reduce-to-one -> root
+  min_gap_clocks: 60
