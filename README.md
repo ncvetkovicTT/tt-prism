@@ -24,6 +24,10 @@ Everything operates on one data model — see [`models.py`](src/tt_prism/models.
 There's no separate "presentation" type: the YAML file is the source of truth,
 and the CLI, web editor, and API all read/write the same shape.
 
+> **Authoring a model from a workload?** See [`AUTHORING.md`](AUTHORING.md) — a
+> step-by-step guide (and a copy-paste LLM prompt) for mapping an AI model
+> layer / kernel into this YAML format.
+
 ## Install
 
 Requires Python 3.10+.
