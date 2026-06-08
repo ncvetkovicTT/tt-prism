@@ -227,8 +227,20 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
     # visual break) and a per-core group header. Single-core diagrams keep the
     # original lanes/ids unchanged.
     cores = diagram.effective_cores()
+    core_ids = [c.id for c in cores]
     multi = len(cores) > 1
     template = sorted(diagram.lanes, key=lambda l: l.order)
+    op_of_block = {b.id: op for op in diagram.ops for b in op.blocks}
+
+    # Cores an op's bars are drawn on. An SPMD phase op declares `on_cores` (it
+    # runs on many cores) → its bars are replicated across all of them so the
+    # Gantt shows every core, not just the representative core_id.
+    def render_cores(op) -> list[str]:
+        if op and op.on_cores:
+            return list(op.on_cores)
+        if op and op.core_id:
+            return [op.core_id]
+        return [core_ids[0]] if core_ids else ["__core__"]
 
     if multi:
         lanes: list[Lane] = []
@@ -243,26 +255,32 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
                     group_label=core.display_name,
                 ))
 
-        def lane_id_for(b: ScheduledBlock) -> str:
-            return f"{b.core_id}::{b.lane_id}"
+        def lane_id_for(lane_id: str, core: str) -> str:
+            return f"{core}::{lane_id}"
     else:
         lanes = list(diagram.lanes)
 
-        def lane_id_for(b: ScheduledBlock) -> str:
-            return b.lane_id
+        def lane_id_for(lane_id: str, core: str) -> str:
+            return lane_id
 
-    work_items = [
-        WorkItem(
-            id=b.block_id,
-            lane_id=lane_id_for(b),
-            resource_id=b.resource_id,
-            label=b.label,
-            start_clock=b.start_clock,
-            duration_clocks=b.duration_clocks,
-            tags=_tags(b),
-        )
-        for b in sched.blocks
-    ]
+    # Replicated work-items get a per-core id suffix so they stay unique; a
+    # single-core op keeps its original block id (backward compatible).
+    def wid(block_id: str, core: str, n: int) -> str:
+        return f"{block_id}@@{core}" if n > 1 else block_id
+
+    work_items: list[WorkItem] = []
+    for b in sched.blocks:
+        rc = render_cores(op_of_block.get(b.block_id))
+        for core in rc:
+            work_items.append(WorkItem(
+                id=wid(b.block_id, core, len(rc)),
+                lane_id=lane_id_for(b.lane_id, core),
+                resource_id=b.resource_id,
+                label=b.label,
+                start_clock=b.start_clock,
+                duration_clocks=b.duration_clocks,
+                tags=_tags(b),
+            ))
 
     deps: list[Dependency] = []
     for e in sched.edges:
@@ -271,7 +289,15 @@ def to_render_diagram(diagram: Diagram) -> Diagram:
         kind = "dep" if e.reason == "intra_op" else e.reason
         if kind not in ("fifo", "dep", "flow", "src_valid", "dst_valid", "l1_data", "issue_order", "noc"):
             kind = "dep"
-        deps.append(Dependency.model_validate({"from": e.frm, "to": e.to, "kind": kind}))
+        of, ot = op_of_block.get(e.frm), op_of_block.get(e.to)
+        rc = render_cores(of)
+        if of is not None and of is ot and len(rc) > 1:
+            # intra-op edge on a replicated op → one arrow per core
+            for core in rc:
+                deps.append(Dependency.model_validate(
+                    {"from": wid(e.frm, core, len(rc)), "to": wid(e.to, core, len(rc)), "kind": kind}))
+        else:
+            deps.append(Dependency.model_validate({"from": e.frm, "to": e.to, "kind": kind}))
 
     return Diagram(
         title=diagram.title,
