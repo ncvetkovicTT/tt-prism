@@ -161,3 +161,18 @@ button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-all
   background: #eef1ec; border: 1px solid #d4d8cf; border-radius: 4px; padding: 4px 0; }
 .core-ops { margin: 0; padding: 6px 10px 10px 24px; font-size: 12px; }
 .core-ops li.is-init { color: var(--muted); }
+
+/* ---- flow datum tokens (labeled by data identity) ---- */
+.token.datum { width: auto; min-width: 34px; max-width: 120px; height: 22px; padding: 0 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
+.token.datum.active { outline: 2px solid #18221f; outline-offset: 1px; opacity: 1; z-index: 6; }
+.token.datum.dimmed { opacity: 0.28; filter: saturate(0.5); }
+.flow-caption .datum-chip { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px;
+  background: #18221f; color: #fff; font-size: 11px; font-weight: 700; }
+
+/* ---- chip NoC arrow payload label + phase tags ---- */
+.noc-label { font-size: 11px; font-weight: 700; fill: #6b21a8; paint-order: stroke;
+  stroke: #fff; stroke-width: 3px; stroke-linejoin: round; }
+.noc-label-bg { fill: #f3e8ff; opacity: 0.9; }
+.noc-phase { font-size: 10px; color: #6b21a8; font-weight: 700; }
+.step-list li.current .noc-phase { color: #4a1568; }
