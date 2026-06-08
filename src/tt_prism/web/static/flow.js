@@ -340,12 +340,15 @@ function buildChip() {
 // Phase grouping so the NoC list reads as "what happens when".
 function nocPhase(it) {
   const l = (it.label || "").toLowerCase();
-  if (l.includes("bcast") || l.includes("broadcast")) return "① broadcast";
-  if (l.includes("sdpa")) return "② SDPA reduce";
-  if (l.includes("all-reduce") || l.includes("allreduce")) return "③ all-reduce";
-  if (l.includes("reduce-to-one") || l.includes("reduce to one")) return "④ reduce-to-one";
+  if (l.includes("bcast") || l.includes("broadcast")) return "broadcast";
+  if (l.includes("sdpa")) return "SDPA all-reduce";
+  if (l.includes("allgather") || l.includes("all-gather") || l.includes("gather")) return "AllGather";
+  if (l.includes("all-reduce") || l.includes("allreduce")) return "all-reduce";
+  if (l.includes("reduce-to-one") || l.includes("reduce to one")) return "reduce-to-one";
   return "NoC";
 }
+
+function nocClock(it) { return it.at_clock == null ? "" : `@ ${it.at_clock} clk`; }
 
 function renderNocList() {
   const ol = document.getElementById("noc-list");
@@ -359,7 +362,8 @@ function renderNocList() {
     const li = document.createElement("li");
     li.innerHTML =
       `<span class="s-label">${i + 1}. ${esc(it.from_core)} → ${esc(it.to_core)} ` +
-      `<span class="noc-phase">${esc(nocPhase(it))}</span></span>` +
+      `<span class="noc-phase">${esc(nocPhase(it))}</span> ` +
+      `<span class="noc-clk">${esc(nocClock(it))}</span></span>` +
       `<span class="s-expr">${esc(it.label)}</span>`;
     li.addEventListener("click", () => { stopPlay(); setNoc(i); });
     ol.appendChild(li);
@@ -389,11 +393,14 @@ function setNoc(k) {
     c.classList.toggle("recv", c.dataset.core === it.to_core);
   });
   drawNocArrow(it);
+  const when = it.at_clock == null ? "" :
+    ` <span class="noc-clk">${esc(nocClock(it))}</span>`;
   cap.innerHTML =
-    `<strong>Step ${state.noc + 1}/${items.length} · ${esc(nocPhase(it))}</strong>` +
+    `<strong>Step ${state.noc + 1}/${items.length} · ${esc(nocPhase(it))}</strong>${when}` +
     `<div>${esc(it.from_core)} <b>sends</b> → ${esc(it.to_core)} <b>receives</b>` +
     `<span class="datum-chip">${esc(it.label)}</span></div>` +
-    `<div class="note">producer op <code>${esc(it.from_op)}</code> → consumer op <code>${esc(it.to_op)}</code></div>`;
+    `<div class="note">producer op <code>${esc(it.from_op)}</code> (ends @ ${it.at_clock ?? "?"} clk) ` +
+    `→ consumer op <code>${esc(it.to_op)}</code>${it.to_clock == null ? "" : ` (starts @ ${it.to_clock} clk)`}</div>`;
   document.querySelectorAll("#noc-list li").forEach((li, i) => li.classList.toggle("current", i === state.noc));
   document.getElementById("step-info").textContent = `NoC ${state.noc + 1} / ${items.length}`;
 }

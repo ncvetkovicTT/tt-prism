@@ -115,10 +115,13 @@ def _endpoint_op(diagram: Diagram, ref: str) -> Op | None:
 
 
 def chip_payload(diagram: Diagram) -> dict:
-    """Whole-chip view: each core as a [L1→Src→DEST→L1] block plus the ordered
-    cross-core (NoC) interactions derived from dependencies whose two ops live
-    on different cores. Cores are otherwise independent. Interactions keep the
-    authored order of the diagram's ``dependencies`` list."""
+    """Whole-chip view: each core as a [L1→Src→DEST→L1] block plus the cross-core
+    (NoC) interactions derived from dependencies whose two ops live on different
+    cores. Interactions are time-stamped with the producer op's scheduled end
+    clock (when the transfer can fire) and ordered by that time, so stepping
+    through them follows the schedule — you see *when* each transfer happens."""
+    from tt_prism.schedule import ScheduleError, solve
+
     cores = diagram.effective_cores()
     ops_by_core: dict[str, list[dict]] = {c.id: [] for c in cores}
     for op in diagram.ops:
@@ -126,6 +129,16 @@ def chip_payload(diagram: Diagram) -> dict:
         ops_by_core.setdefault(c.id, []).append(
             {"id": op.id, "name": op.name or op.id, "is_init": op.is_init}
         )
+
+    # Per-op scheduled [start, end] = span of its blocks (for the NoC timeline).
+    op_start: dict[str, int] = {}
+    op_end: dict[str, int] = {}
+    try:
+        for b in solve(diagram).blocks:
+            op_start[b.op_id] = min(op_start.get(b.op_id, b.start_clock), b.start_clock)
+            op_end[b.op_id] = max(op_end.get(b.op_id, b.end_clock), b.end_clock)
+    except ScheduleError:
+        pass  # leave timing unknown if the graph doesn't schedule
 
     interactions: list[dict] = []
     for i, d in enumerate(diagram.dependencies):
@@ -141,7 +154,11 @@ def chip_payload(diagram: Diagram) -> dict:
             "to_op": to.id, "to_core": tc.id,
             "kind": d.kind,
             "label": d.label or f"{fo.name or fo.id} → {to.name or to.id}",
+            "at_clock": op_end.get(fo.id),         # transfer fires when producer op ends
+            "to_clock": op_start.get(to.id),       # consumer op starts
         })
+    # order by when the transfer happens (None timings sort last, stably)
+    interactions.sort(key=lambda it: (it["at_clock"] is None, it["at_clock"] or 0))
 
     return {
         "multicore": len(diagram.cores) > 1,
