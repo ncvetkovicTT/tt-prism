@@ -1,0 +1,1790 @@
+title: "DeepSeek-V3 decoder \u2014 8 Tensix cores within ONE device"
+clock_ghz: 1.0
+grid_clocks: 128
+dest_banks: 2
+cores:
+- id: c0
+  x: 0
+  y: 0
+  name: core 0 [coordinator]
+- id: c1
+  x: 1
+  y: 0
+  name: core 1
+- id: c2
+  x: 2
+  y: 0
+  name: core 2
+- id: c3
+  x: 3
+  y: 0
+  name: core 3
+- id: c4
+  x: 0
+  y: 1
+  name: core 4
+- id: c5
+  x: 1
+  y: 1
+  name: core 5
+- id: c6
+  x: 2
+  y: 1
+  name: core 6
+- id: c7
+  x: 3
+  y: 1
+  name: core 7
+lanes:
+- id: trisc0
+  name: TRISC0/UNPACK
+  order: 0
+  group: null
+  group_label: ''
+- id: trisc1
+  name: TRISC1/FPU
+  order: 1
+  group: null
+  group_label: ''
+- id: trisc2
+  name: TRISC2/SFPU+PACK
+  order: 2
+  group: null
+  group_label: ''
+resources:
+- id: unpack
+  name: UNPACK
+  color: '#ef9a9a'
+- id: fpu
+  name: FPU
+  color: '#a5d6a7'
+- id: sfpu
+  name: SFPU
+  color: '#90caf9'
+- id: pack
+  name: PACK
+  color: '#ffcc80'
+work_items: []
+ops:
+- id: c0_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c0
+  category: null
+  flow: []
+  blocks:
+  - id: c0_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c0_rmsn
+  name: rmsnorm_in (coordinator)
+  kind: rmsnorm
+  tiles: 4
+  core_id: c0
+  category: null
+  flow: []
+  blocks:
+  - id: c0_rmsn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: c0_rmsn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c0_rmsn_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 20
+    dest_bank: null
+    tags: []
+  - id: c0_rmsn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c0_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c0
+  category: null
+  flow: []
+  blocks:
+  - id: c0_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c0_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c0_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c0_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c0
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c0_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c0_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c0_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c0_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c0_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c0
+  category: null
+  flow: []
+  blocks:
+  - id: c0_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c0_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c0_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c0_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+- id: c0_comb
+  name: gather + combine (coordinator)
+  kind: eltwise
+  tiles: 4
+  core_id: c0
+  category: null
+  flow: []
+  blocks:
+  - id: c0_comb_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 8
+    dest_bank: null
+    tags: []
+  - id: c0_comb_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 40
+    dest_bank: null
+    tags: []
+  - id: c0_comb_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 16
+    dest_bank: null
+    tags: []
+- id: c1_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c1
+  category: null
+  flow: []
+  blocks:
+  - id: c1_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c1_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c1
+  category: null
+  flow: []
+  blocks:
+  - id: c1_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c1_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c1_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c1_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c1
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c1_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c1_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c1_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c1_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c1_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c1
+  category: null
+  flow: []
+  blocks:
+  - id: c1_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c1_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c1_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c1_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+- id: c2_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c2
+  category: null
+  flow: []
+  blocks:
+  - id: c2_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c2_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c2
+  category: null
+  flow: []
+  blocks:
+  - id: c2_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c2_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c2_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c2_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c2
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c2_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c2_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c2_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c2_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c2_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c2
+  category: null
+  flow: []
+  blocks:
+  - id: c2_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c2_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c2_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c2_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+- id: c3_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c3
+  category: null
+  flow: []
+  blocks:
+  - id: c3_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c3_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c3
+  category: null
+  flow: []
+  blocks:
+  - id: c3_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c3_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c3_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c3_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c3
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c3_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c3_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c3_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c3_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c3_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c3
+  category: null
+  flow: []
+  blocks:
+  - id: c3_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c3_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c3_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c3_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+- id: c4_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c4
+  category: null
+  flow: []
+  blocks:
+  - id: c4_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c4_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c4
+  category: null
+  flow: []
+  blocks:
+  - id: c4_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c4_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c4_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c4_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c4
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c4_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c4_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c4_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c4_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c4_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c4
+  category: null
+  flow: []
+  blocks:
+  - id: c4_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c4_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c4_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c4_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+- id: c5_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c5
+  category: null
+  flow: []
+  blocks:
+  - id: c5_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c5_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c5
+  category: null
+  flow: []
+  blocks:
+  - id: c5_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c5_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c5_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c5_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c5
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c5_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c5_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c5_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c5_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c5_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c5
+  category: null
+  flow: []
+  blocks:
+  - id: c5_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c5_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c5_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c5_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+- id: c6_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c6
+  category: null
+  flow: []
+  blocks:
+  - id: c6_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c6_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c6
+  category: null
+  flow: []
+  blocks:
+  - id: c6_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c6_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c6_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c6_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c6
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c6_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c6_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c6_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c6_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c6_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c6
+  category: null
+  flow: []
+  blocks:
+  - id: c6_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c6_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c6_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c6_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+- id: c7_init
+  name: decoder_init
+  kind: init
+  tiles: 4
+  core_id: c7
+  category: null
+  flow: []
+  blocks:
+  - id: c7_init_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 12
+    dest_bank: null
+    tags: []
+- id: c7_attn
+  name: attn proj shard (matmul)
+  kind: matmul
+  tiles: 4
+  core_id: c7
+  category: null
+  flow: []
+  blocks:
+  - id: c7_attn_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 10
+    dest_bank: null
+    tags: []
+  - id: c7_attn_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 200
+    dest_bank: null
+    tags: []
+  - id: c7_attn_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 18
+    dest_bank: null
+    tags: []
+- id: c7_sdpa
+  name: flash SDPA shard
+  kind: flash_attention
+  tiles: 4
+  core_id: c7
+  category: null
+  flow:
+  - id: ''
+    label: unpack Q,K
+    reads:
+    - l1_in
+    writes:
+    - srca
+    - srcb
+    data: ''
+    expr: ''
+    note: ''
+  - id: ''
+    label: QK^T matmul (FPU)
+    reads:
+    - srca
+    - srcb
+    writes:
+    - dest
+    data: ''
+    expr: scores = Q@K^T
+    note: ''
+  - id: ''
+    label: reduce-max (SFPU)
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: running max
+    note: ''
+  - id: ''
+    label: exp / correction
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: online softmax
+    note: ''
+  - id: ''
+    label: PV matmul (FPU)
+    reads:
+    - srca
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: out += P@V
+    note: ''
+  - id: ''
+    label: reduce-sum + recip
+    reads:
+    - dest
+    writes:
+    - dest
+    data: ''
+    expr: normalize
+    note: ''
+  - id: ''
+    label: pack out
+    reads:
+    - dest
+    writes:
+    - l1_out
+    data: ''
+    expr: ''
+    note: ''
+  blocks:
+  - id: c7_sdpa_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c7_sdpa_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 220
+    dest_bank: null
+    tags: []
+  - id: c7_sdpa_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 90
+    dest_bank: null
+    tags: []
+  - id: c7_sdpa_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 24
+    dest_bank: null
+    tags: []
+- id: c7_mlp
+  name: MLP proj shard (gate/up/down)
+  kind: matmul
+  tiles: 4
+  core_id: c7
+  category: null
+  flow: []
+  blocks:
+  - id: c7_mlp_unpack
+    lane_id: trisc0
+    resource_id: unpack
+    label: unpack
+    duration_clocks: 14
+    dest_bank: null
+    tags: []
+  - id: c7_mlp_fpu
+    lane_id: trisc1
+    resource_id: fpu
+    label: fpu
+    duration_clocks: 280
+    dest_bank: null
+    tags: []
+  - id: c7_mlp_sfpu
+    lane_id: trisc2
+    resource_id: sfpu
+    label: sfpu
+    duration_clocks: 30
+    dest_bank: null
+    tags: []
+  - id: c7_mlp_pack
+    lane_id: trisc2
+    resource_id: pack
+    label: pack
+    duration_clocks: 22
+    dest_bank: null
+    tags: []
+dependencies:
+- from: c0_init
+  to: c0_rmsn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c0_rmsn
+  to: c0_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c0_attn
+  to: c0_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c0_sdpa
+  to: c0_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c0_mlp
+  to: c0_comb
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c1_init
+  to: c1_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c1_attn
+  to: c1_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c1_sdpa
+  to: c1_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c2_init
+  to: c2_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c2_attn
+  to: c2_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c2_sdpa
+  to: c2_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c3_init
+  to: c3_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c3_attn
+  to: c3_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c3_sdpa
+  to: c3_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c4_init
+  to: c4_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c4_attn
+  to: c4_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c4_sdpa
+  to: c4_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c5_init
+  to: c5_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c5_attn
+  to: c5_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c5_sdpa
+  to: c5_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c6_init
+  to: c6_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c6_attn
+  to: c6_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c6_sdpa
+  to: c6_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c7_init
+  to: c7_attn
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c7_attn
+  to: c7_sdpa
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c7_sdpa
+  to: c7_mlp
+  kind: l1_data
+  label: ''
+  min_gap_clocks: 0
+- from: c0_rmsn
+  to: c1_attn
+  kind: noc
+  label: "RMSNorm mcast \u2192 peers"
+  min_gap_clocks: 20
+- from: c0_rmsn
+  to: c2_attn
+  kind: noc
+  label: "RMSNorm mcast \u2192 peers"
+  min_gap_clocks: 20
+- from: c0_rmsn
+  to: c3_attn
+  kind: noc
+  label: "RMSNorm mcast \u2192 peers"
+  min_gap_clocks: 20
+- from: c0_rmsn
+  to: c4_attn
+  kind: noc
+  label: "RMSNorm mcast \u2192 peers"
+  min_gap_clocks: 20
+- from: c0_rmsn
+  to: c5_attn
+  kind: noc
+  label: "RMSNorm mcast \u2192 peers"
+  min_gap_clocks: 20
+- from: c0_rmsn
+  to: c6_attn
+  kind: noc
+  label: "RMSNorm mcast \u2192 peers"
+  min_gap_clocks: 20
+- from: c0_rmsn
+  to: c7_attn
+  kind: noc
+  label: "RMSNorm mcast \u2192 peers"
+  min_gap_clocks: 20
+- from: c1_mlp
+  to: c0_comb
+  kind: noc
+  label: "partial gather \u2192 c0"
+  min_gap_clocks: 20
+- from: c2_mlp
+  to: c0_comb
+  kind: noc
+  label: "partial gather \u2192 c0"
+  min_gap_clocks: 20
+- from: c3_mlp
+  to: c0_comb
+  kind: noc
+  label: "partial gather \u2192 c0"
+  min_gap_clocks: 20
+- from: c4_mlp
+  to: c0_comb
+  kind: noc
+  label: "partial gather \u2192 c0"
+  min_gap_clocks: 20
+- from: c5_mlp
+  to: c0_comb
+  kind: noc
+  label: "partial gather \u2192 c0"
+  min_gap_clocks: 20
+- from: c6_mlp
+  to: c0_comb
+  kind: noc
+  label: "partial gather \u2192 c0"
+  min_gap_clocks: 20
+- from: c7_mlp
+  to: c0_comb
+  kind: noc
+  label: "partial gather \u2192 c0"
+  min_gap_clocks: 20

@@ -123,3 +123,71 @@ diagram = Diagram(
 out = Path(__file__).with_name("decoder_mlp_chip.yaml")
 storage.dump(diagram, out)
 print(f"wrote {out}  ({len(cores)} chips, {len(ops)} ops, {len(deps)} deps)")
+
+
+# ======================================================================
+# Intra-device view: the 8 Tensix cores cooperating WITHIN one device.
+# Each device runs the decoder across ~8 worker cores: a coordinator core
+# (c0) RMSNorms + mcasts the activation; all 8 cores compute a shard of the
+# distributed matmuls (q/kv/o-proj, then gate/up/down) and a slice of flash
+# SDPA; partials are gathered back to c0. (Per-core work distribution is
+# modeled coarsely/SPMD; the real grid assignment is finer.)
+# ======================================================================
+LANES = [Lane(id="trisc0", name="TRISC0/UNPACK", order=0),
+         Lane(id="trisc1", name="TRISC1/FPU", order=1),
+         Lane(id="trisc2", name="TRISC2/SFPU+PACK", order=2)]
+RES = [Resource(id="unpack", name="UNPACK", color="#ef9a9a"),
+       Resource(id="fpu", name="FPU", color="#a5d6a7"),
+       Resource(id="sfpu", name="SFPU", color="#90caf9"),
+       Resource(id="pack", name="PACK", color="#ffcc80")]
+NCORES = 8
+
+dcores, dops, ddeps = [], [], []
+for i in range(NCORES):
+    cc = f"c{i}"
+    role = " [coordinator]" if i == 0 else ""
+    dcores.append(Core(id=cc, x=i % 4, y=i // 4, name=f"core {i}{role}"))
+
+    def dop(suffix, name, kind, blocks, flow=None, core=None):
+        cc_ = core
+        bl = [Block(id=f"{cc_}_{suffix}_{r}", lane_id=lane, resource_id=r, label=r, duration_clocks=d)
+              for (r, lane, d) in blocks]
+        return Op(id=f"{cc_}_{suffix}", name=name, kind=kind, core_id=cc_, tiles=4, blocks=bl, flow=flow or [])
+
+    U, F, S, P = "unpack", "fpu", "sfpu", "pack"
+    seq = []
+    seq.append(dop("init", "decoder_init", "init", [(F, "trisc1", 12)], core=cc))
+    if i == 0:
+        seq.append(dop("rmsn", "rmsnorm_in (coordinator)", "rmsnorm",
+                       [(U, "trisc0", 8), (F, "trisc1", 30), (S, "trisc2", 20), (P, "trisc2", 12)], core=cc))
+    seq.append(dop("attn", "attn proj shard (matmul)", "matmul",
+                   [(U, "trisc0", 10), (F, "trisc1", 200), (P, "trisc2", 18)], core=cc))
+    seq.append(dop("sdpa", "flash SDPA shard", "flash_attention",
+                   [(U, "trisc0", 30), (F, "trisc1", 220), (S, "trisc2", 90), (P, "trisc2", 24)],
+                   flow=SDPA_FLOW, core=cc))
+    seq.append(dop("mlp", "MLP proj shard (gate/up/down)", "matmul",
+                   [(U, "trisc0", 14), (F, "trisc1", 280), (S, "trisc2", 30), (P, "trisc2", 22)], core=cc))
+    if i == 0:
+        seq.append(dop("comb", "gather + combine (coordinator)", "eltwise",
+                       [(U, "trisc0", 8), (F, "trisc1", 40), (P, "trisc2", 16)], core=cc))
+    dops.extend(seq)
+    for a, b in zip(seq, seq[1:]):
+        ddeps.append(Dependency.model_validate({"from": a.id, "to": b.id, "kind": "l1_data"}))
+
+def DD(frm, to, label, gap=20):
+    ddeps.append(Dependency.model_validate({"from": frm, "to": to, "kind": "noc", "min_gap_clocks": gap, "label": label}))
+
+# intra-device collectives: c0 mcasts normalized activation to peers; peers gather partials back
+for i in range(1, NCORES):
+    DD("c0_rmsn", f"c{i}_attn", "RMSNorm mcast → peers")
+for i in range(1, NCORES):
+    DD(f"c{i}_mlp", "c0_comb", "partial gather → c0")
+
+ddiagram = Diagram(
+    title="DeepSeek-V3 decoder — 8 Tensix cores within ONE device",
+    clock_ghz=1.0, grid_clocks=128, dest_banks=2,
+    cores=dcores, lanes=LANES, resources=RES, ops=dops, dependencies=ddeps,
+)
+out2 = Path(__file__).with_name("decoder_mlp_device8.yaml")
+storage.dump(ddiagram, out2)
+print(f"wrote {out2}  ({len(dcores)} cores, {len(dops)} ops, {len(ddeps)} deps)")
