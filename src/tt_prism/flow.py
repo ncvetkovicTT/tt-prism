@@ -64,6 +64,15 @@ def flow_payload(diagram: Diagram) -> dict:
     client can grey them out) with its resolved steps and the stages they use."""
     ops = []
     for op in diagram.ops:
+        # Init ops have no dataflow; emit them flagged but empty (the client
+        # greys them out and never opens them).
+        if op.is_init:
+            ops.append({
+                "id": op.id, "name": op.name or op.id, "kind": op.kind,
+                "tiles": op.tiles, "core_id": op.core_id,
+                "is_init": True, "derived": False, "stages": [], "steps": [],
+            })
+            continue
         steps = resolved_flow(op)
         ops.append({
             "id": op.id,

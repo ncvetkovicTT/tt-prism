@@ -132,7 +132,7 @@ class Op(BaseModel):
     id: str
     name: str = ""
     kind: str = ""           # free-form: "matmul", "reduce", ... (drives nothing yet)
-    tiles: int = 1           # number of tiles operated on (metadata for now)
+    tiles: int = Field(default=1, ge=1)   # number of tiles operated on (metadata for now)
     core_id: str | None = None  # which Core this op runs on (None → the single/default core)
     # Op category. None → inferred: an op whose name/kind mentions "init"
     # (init, reinit, mm_init, …) is an init op; everything else is execute.
@@ -147,6 +147,8 @@ class Op(BaseModel):
     def is_init(self) -> bool:
         if self.category is not None:
             return self.category == "init"
+        # Substring match — covers init / reinit / mm_init. If an *execute* op's
+        # name legitimately contains "init", set `category: execute` to override.
         return "init" in f"{self.name} {self.kind}".lower()
 
     @property

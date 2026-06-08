@@ -73,7 +73,12 @@ function renderOpTitle() {
 function buildDiagram() {
   const host = document.getElementById("diagram");
   host.innerHTML = "";
+  state.tokens = [];
   const labels = state.data.stage_labels;
+  if (!state.op.stages.length || !state.op.steps.length) {
+    host.innerHTML = '<div class="muted" style="padding:20px">This op has no dataflow steps.</div>';
+    return;
+  }
   // stage columns (only the stages this op uses, in canonical order)
   const cols = document.createElement("div");
   cols.className = "stage-cols";
@@ -90,7 +95,7 @@ function buildDiagram() {
   const layer = document.createElement("div");
   layer.className = "token-layer";
   host.appendChild(layer);
-  const n = Math.min(state.op.tiles, TILE_CAP);
+  const n = Math.max(1, Math.min(state.op.tiles, TILE_CAP));
   state.tokens = [];
   for (let i = 0; i < n; i++) {
     const el = document.createElement("div");
@@ -120,7 +125,11 @@ function stageAtStep(k) {
 
 function setStep(k) {
   const steps = state.op.steps;
-  if (!steps.length) return;
+  if (!steps.length) {
+    document.getElementById("step-caption").textContent = "No dataflow steps for this op.";
+    document.getElementById("step-info").textContent = "";
+    return;
+  }
   state.step = Math.max(0, Math.min(k, steps.length - 1));
   const st = steps[state.step];
 

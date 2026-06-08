@@ -91,3 +91,26 @@ def test_flow_payload_shape_and_stage_usage():
 def test_derived_flow_marked_derived():
     d = _diagram([_op("mm", name="matmul")])
     assert flow_payload(d)["ops"][0]["derived"] is True
+
+
+def test_init_ops_emit_empty_flow():
+    d = _diagram([_op("i", name="mm_init")])
+    o = flow_payload(d)["ops"][0]
+    assert o["is_init"] is True and o["stages"] == [] and o["steps"] == []
+
+
+def test_stage_usage_invariant_holds():
+    # Every step's read/write stage must be in the op's `stages`, and `stages`
+    # must be the canonical-ordered subset actually used. flow.js token
+    # placement/highlighting depends on this.
+    explicit = [
+        FlowStep(label="u", reads=["l1_in"], writes=["srca", "srcb"]),
+        FlowStep(label="m", reads=["srca", "srcb"], writes=["dest"]),
+        FlowStep(label="s", reads=["dest"], writes=["sfpu"]),
+        FlowStep(label="p", reads=["sfpu", "dest"], writes=["l1_out"]),
+    ]
+    d = _diagram([_op("mm", name="matmul", flow=explicit), _op("cpy", name="copy")])
+    for o in flow_payload(d)["ops"]:
+        used = {s for st in o["steps"] for s in (*st["reads"], *st["writes"])}
+        assert used <= set(o["stages"])                       # no orphan target stage
+        assert o["stages"] == [s for s in STAGE_ORDER if s in used]   # canonical order
