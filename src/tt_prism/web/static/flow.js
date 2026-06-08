@@ -39,7 +39,7 @@ function setMode(m) {
   document.getElementById("mode-chip").classList.toggle("active", m === "chip");
   document.querySelector(".flow-main").hidden = m !== "op";
   document.getElementById("chip-main").hidden = m !== "chip";
-  if (m === "chip") { buildChip(); setNoc(0); }
+  if (m === "chip") { buildChip(); setNoc(state.noc); }
   else { document.getElementById("step-info").textContent = ""; if (state.op) setStep(state.step); }
 }
 
@@ -209,14 +209,14 @@ function buildChip() {
   grid.innerHTML = "";
   const cores = state.chip.cores;
   if (!cores.length) { grid.innerHTML = '<div class="muted" style="padding:20px">No cores.</div>'; return; }
-  const cols = Math.max(...cores.map((c) => c.x)) + 1;
+  const cols = Math.max(1, ...cores.map((c) => (c.x | 0) + 1));
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(150px, 1fr))`;
   for (const c of cores) {
     const card = document.createElement("div");
     card.className = "core-card";
     card.dataset.core = c.id;
-    card.style.gridColumn = String(c.x + 1);
-    card.style.gridRow = String(c.y + 1);
+    card.style.gridColumn = String(Math.max(1, (c.x | 0) + 1));
+    card.style.gridRow = String(Math.max(1, (c.y | 0) + 1));
     const ops = c.ops.map((o) =>
       `<li class="${o.is_init ? "is-init" : ""}">${esc(o.name)}</li>`).join("");
     card.innerHTML =
@@ -280,11 +280,18 @@ function setNoc(k) {
   document.getElementById("step-info").textContent = `NoC ${state.noc + 1} / ${items.length}`;
 }
 
+// Look up a core card by id via iteration — core ids come from YAML and are
+// unconstrained, so we must not interpolate them into a CSS selector.
+function coreCard(id) {
+  return [...document.getElementById("chip-grid").querySelectorAll(".core-card")]
+    .find((c) => c.dataset.core === id) || null;
+}
+
 function drawNocArrow(fromId, toId) {
   const grid = document.getElementById("chip-grid");
   const path = document.getElementById("noc-path");
-  const a = grid.querySelector(`.core-card[data-core="${fromId}"]`);
-  const b = grid.querySelector(`.core-card[data-core="${toId}"]`);
+  const a = coreCard(fromId);
+  const b = coreCard(toId);
   if (!a || !b || !path) return;
   const gb = grid.getBoundingClientRect();
   const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
