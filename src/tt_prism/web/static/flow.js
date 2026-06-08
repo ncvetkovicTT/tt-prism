@@ -254,9 +254,21 @@ function buildChip() {
   svg.innerHTML =
     '<defs><marker id="noc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" ' +
     'orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8e24aa"/></marker></defs>' +
-    '<path id="noc-path" fill="none" stroke="#8e24aa" stroke-width="2.5" marker-end="url(#noc-arrow)"/>';
+    '<path id="noc-path" fill="none" stroke="#8e24aa" stroke-width="2.5" marker-end="url(#noc-arrow)"/>' +
+    '<rect id="noc-label-bg" class="noc-label-bg" rx="4" hidden/>' +
+    '<text id="noc-label" class="noc-label" text-anchor="middle"></text>';
   grid.appendChild(svg);
   renderNocList();
+}
+
+// Phase grouping so the NoC list reads as "what happens when".
+function nocPhase(it) {
+  const l = (it.label || "").toLowerCase();
+  if (l.includes("bcast") || l.includes("broadcast")) return "① broadcast";
+  if (l.includes("sdpa")) return "② SDPA reduce";
+  if (l.includes("all-reduce") || l.includes("allreduce")) return "③ all-reduce";
+  if (l.includes("reduce-to-one") || l.includes("reduce to one")) return "④ reduce-to-one";
+  return "NoC";
 }
 
 function renderNocList() {
@@ -269,7 +281,9 @@ function renderNocList() {
   }
   state.chip.interactions.forEach((it, i) => {
     const li = document.createElement("li");
-    li.innerHTML = `<span class="s-label">${esc(it.from_core)} → ${esc(it.to_core)}</span>` +
+    li.innerHTML =
+      `<span class="s-label">${i + 1}. ${esc(it.from_core)} → ${esc(it.to_core)} ` +
+      `<span class="noc-phase">${esc(nocPhase(it))}</span></span>` +
       `<span class="s-expr">${esc(it.label)}</span>`;
     li.addEventListener("click", () => { stopPlay(); setNoc(i); });
     ol.appendChild(li);
@@ -286,6 +300,8 @@ function setNoc(k) {
     document.getElementById("step-info").textContent = "";
     grid.querySelectorAll(".core-card").forEach((c) => c.classList.remove("dim", "send", "recv"));
     if (path) path.removeAttribute("d");
+    const lbl = document.getElementById("noc-label"), lblBg = document.getElementById("noc-label-bg");
+    if (lbl) lbl.textContent = ""; if (lblBg) lblBg.setAttribute("hidden", "");
     return;
   }
   state.noc = Math.max(0, Math.min(k, items.length - 1));
@@ -296,9 +312,12 @@ function setNoc(k) {
     c.classList.toggle("send", c.dataset.core === it.from_core);
     c.classList.toggle("recv", c.dataset.core === it.to_core);
   });
-  drawNocArrow(it.from_core, it.to_core);
-  cap.innerHTML = `<strong>NoC:</strong> ${esc(it.from_core)} → ${esc(it.to_core)} ` +
-    `<span class="flowarrow">${esc(it.label)}</span>`;
+  drawNocArrow(it);
+  cap.innerHTML =
+    `<strong>Step ${state.noc + 1}/${items.length} · ${esc(nocPhase(it))}</strong>` +
+    `<div>${esc(it.from_core)} <b>sends</b> → ${esc(it.to_core)} <b>receives</b>` +
+    `<span class="datum-chip">${esc(it.label)}</span></div>` +
+    `<div class="note">producer op <code>${esc(it.from_op)}</code> → consumer op <code>${esc(it.to_op)}</code></div>`;
   document.querySelectorAll("#noc-list li").forEach((li, i) => li.classList.toggle("current", i === state.noc));
   document.getElementById("step-info").textContent = `NoC ${state.noc + 1} / ${items.length}`;
 }
@@ -310,11 +329,13 @@ function coreCard(id) {
     .find((c) => c.dataset.core === id) || null;
 }
 
-function drawNocArrow(fromId, toId) {
+function drawNocArrow(it) {
   const grid = document.getElementById("chip-grid");
   const path = document.getElementById("noc-path");
-  const a = coreCard(fromId);
-  const b = coreCard(toId);
+  const lbl = document.getElementById("noc-label");
+  const lblBg = document.getElementById("noc-label-bg");
+  const a = coreCard(it.from_core);
+  const b = coreCard(it.to_core);
   if (!a || !b || !path) return;
   const gb = grid.getBoundingClientRect();
   const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
@@ -322,6 +343,18 @@ function drawNocArrow(fromId, toId) {
   const bx = rb.left - gb.left + rb.width / 2, by = rb.top - gb.top + rb.height / 2;
   const mx = (ax + bx) / 2, my = (ay + by) / 2 - 28;   // slight arc
   path.setAttribute("d", `M ${ax} ${ay} Q ${mx} ${my} ${bx} ${by}`);
+  // payload label centered on the arc apex (the Q control point is the apex)
+  if (lbl) {
+    const lx = (ax + 2 * mx + bx) / 4, ly = (ay + 2 * my + by) / 4;  // bezier midpoint
+    lbl.textContent = it.label || "";
+    lbl.setAttribute("x", lx); lbl.setAttribute("y", ly - 4);
+    if (lblBg) {
+      const bb = lbl.getBBox();
+      lblBg.setAttribute("x", bb.x - 5); lblBg.setAttribute("y", bb.y - 2);
+      lblBg.setAttribute("width", bb.width + 10); lblBg.setAttribute("height", bb.height + 4);
+      lblBg.removeAttribute("hidden");
+    }
+  }
 }
 
 // ---- controls (mode-aware) ----
@@ -360,7 +393,7 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === " ") { e.preventDefault(); togglePlay(); }
 });
 window.addEventListener("resize", () => {
-  if (state.mode === "chip") { const it = state.chip.interactions[state.noc]; if (it) drawNocArrow(it.from_core, it.to_core); }
+  if (state.mode === "chip") { const it = state.chip.interactions[state.noc]; if (it) drawNocArrow(it); }
   else if (state.op && state.datums.length) positionDatums();
 });
 

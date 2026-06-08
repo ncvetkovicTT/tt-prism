@@ -169,3 +169,10 @@ button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: not-all
 .token.datum.dimmed { opacity: 0.28; filter: saturate(0.5); }
 .flow-caption .datum-chip { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px;
   background: #18221f; color: #fff; font-size: 11px; font-weight: 700; }
+
+/* ---- chip NoC arrow payload label + phase tags ---- */
+.noc-label { font-size: 11px; font-weight: 700; fill: #6b21a8; paint-order: stroke;
+  stroke: #fff; stroke-width: 3px; stroke-linejoin: round; }
+.noc-label-bg { fill: #f3e8ff; opacity: 0.9; }
+.noc-phase { font-size: 10px; color: #6b21a8; font-weight: 700; }
+.step-list li.current .noc-phase { color: #4a1568; }
