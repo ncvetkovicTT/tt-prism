@@ -188,5 +188,17 @@ SDPA op (`sdpa_chunk.yaml`), an 8-device mesh (`decoder_mlp_chip.yaml`), and the
 >
 > Produce the tt-prism YAML.
 
-After generating, run `tt-prism validate <file>` (it also checks schedulability)
-and `tt-prism serve <file>` to inspect the Gantt and flow views.
+After generating, run `tt-prism validate <file>` (or, if the console script
+isn't on your PATH, `python -m tt_prism.cli validate <file>`) to check the YAML
+before doing anything else. It reports, with a clear non-traceback message and a
+non-zero exit:
+
+- **invalid YAML** — the file isn't well-formed (bad indentation, quoting, or
+  unbalanced brackets);
+- **invalid schema** — a reference/structure problem: unknown lane / resource /
+  core id, duplicate id, a dependency pointing at an unknown id, a `dest_bank`
+  out of range, or a compute op missing `core_id` on a multi-core diagram;
+- **unschedulable** — for op-authored diagrams, the constraints form a cycle.
+
+Once it prints `ok`, run `tt-prism serve <file>` to inspect the Gantt and flow
+views.

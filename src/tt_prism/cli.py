@@ -91,9 +91,32 @@ def validate(
 ) -> None:
     """Validate a diagram file (and, for op-authored diagrams, that the
     constraints are schedulable)."""
+    from pydantic import ValidationError
+
+    from tt_prism.storage import YamlSyntaxError
+
     try:
         d = storage.load(path)
-    except Exception as e:
+    except YamlSyntaxError as e:
+        console.print(
+            f"[red]invalid YAML[/red] {path} — the file is not well-formed YAML "
+            f"(check indentation, quoting, and matching brackets):\n{e}"
+        )
+        raise typer.Exit(code=1)
+    except ValidationError as e:
+        # Schema / reference problems: unknown lane/resource/core ref, duplicate
+        # id, dep to unknown id, dest_bank out of range, missing core_id, etc.
+        errs = e.errors()
+        lines = []
+        for err in errs:
+            loc = ".".join(str(p) for p in err.get("loc", ())) or "(root)"
+            lines.append(f"  - {loc}: {err.get('msg', '')}")
+        detail = "\n".join(lines)
+        console.print(
+            f"[red]invalid schema[/red] {path} — {len(errs)} problem(s):\n{detail}"
+        )
+        raise typer.Exit(code=1)
+    except Exception as e:  # pragma: no cover - unexpected
         console.print(f"[red]invalid[/red] {path}:\n{e}")
         raise typer.Exit(code=1)
     if d.ops:

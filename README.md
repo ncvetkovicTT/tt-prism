@@ -74,7 +74,13 @@ tools:
 # 1. (optional) scaffold a blank flat diagram to start from
 tt-prism new my_pipeline.yaml
 
-# 2. validate — checks references, and for op-diagrams that they SCHEDULE
+# 2. validate — your first stop for checking a hand-written or generated YAML.
+#    Parses the YAML, validates the schema + all references, and (for op-diagrams)
+#    confirms it schedules. Reports a clear, non-traceback message + non-zero exit
+#    for: invalid YAML (parse error), invalid schema (unknown lane/resource/core
+#    ref, duplicate id, dep to unknown id, dest_bank out of range, op missing
+#    core_id on a multi-core diagram), or unschedulable (cyclic constraints).
+#    If the `tt-prism` script isn't on PATH, use: python -m tt_prism.cli validate <file>
 tt-prism validate examples/ops_dest_banks.yaml
 
 # 3. schedule — solve an op-diagram and print the resolved timeline (start/dur/end)
