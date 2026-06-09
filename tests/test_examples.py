@@ -32,9 +32,11 @@ def _rel(path: str) -> str:
 
 def test_examples_glob_is_nonempty():
     # Guard against a broken glob silently parametrizing zero files (which would
-    # make every example test "pass" by never running).
+    # make every example test "pass" by never running). Branch-agnostic: just
+    # require some examples and at least one op-authored diagram to exercise the
+    # solve/flatten/render path.
     assert EXAMPLES, "no example YAMLs found — glob/path is wrong"
-    assert any("deepseek" in p for p in EXAMPLES), "deepseek examples not picked up"
+    assert any(storage.load(p).ops for p in EXAMPLES), "no op-authored example found"
 
 
 @pytest.mark.parametrize("path", EXAMPLES, ids=_rel)

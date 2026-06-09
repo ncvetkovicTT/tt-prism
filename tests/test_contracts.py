@@ -174,10 +174,13 @@ def test_schedule_is_deterministic():
     starts1 = {b.block_id: b.start_clock for b in s1.blocks}
     starts2 = {b.block_id: b.start_clock for b in s2.blocks}
     assert starts1 == starts2
-    # also identical across the deepseek device8 example (larger, multi-core)
-    big = storage.load(
-        os.path.join(_REPO_ROOT, "examples", "deepseek", "decoder_mlp_device8.yaml")
-    )
+    # also identical across a larger shipped op-authored example (any branch)
+    import glob
+    op_examples = [p for p in sorted(glob.glob(
+        os.path.join(_REPO_ROOT, "examples", "**", "*.yaml"), recursive=True))
+        if storage.load(p).ops]
+    assert op_examples, "no op-authored example found"
+    big = storage.load(op_examples[0])
     a = {b.block_id: b.start_clock for b in solve(big).blocks}
     b = {b.block_id: b.start_clock for b in solve(big).blocks}
     assert a == b
