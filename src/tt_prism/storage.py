@@ -8,15 +8,28 @@ import yaml
 from tt_prism.models import Diagram
 
 
+class YamlSyntaxError(ValueError):
+    """The file is not well-formed YAML (a parse error, before any schema check)."""
+
+
+def _parse_yaml(text: str) -> Any:
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        # Surface the location/context YAML gives us, but as a clean ValueError
+        # (not a raw traceback) so callers can show a friendly message.
+        raise YamlSyntaxError(str(e)) from e
+
+
 def load(path: str | Path) -> Diagram:
-    data = yaml.safe_load(Path(path).read_text())
+    data = _parse_yaml(Path(path).read_text())
     if data is None:
         data = {}
     return Diagram.model_validate(data)
 
 
 def loads(text: str) -> Diagram:
-    data = yaml.safe_load(text) or {}
+    data = _parse_yaml(text) or {}
     return Diagram.model_validate(data)
 
 
